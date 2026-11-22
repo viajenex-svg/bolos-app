@@ -358,6 +358,7 @@
     renderFeePreview();
     renderHours();
     renderBanners(s.banners);
+    renderPopup(s.popup);
     renderPopularPick();
     renderSizes();
     renderExtras();
@@ -621,6 +622,72 @@
         if (no) no.remove();
       }
       img.src = imgSrc(path);
+    });
+  });
+
+  /* ---------------- anúncio em pop-up ---------------- */
+
+  function renderPopup(p) {
+    p = p && typeof p === 'object' ? p : {};
+    $('#ppActive').checked = !!p.active;
+    $('#ppTitle').value = p.title || '';
+    $('#ppText').value = p.text || '';
+    $('#ppBtn').value = p.btn || '';
+    $('#ppFreq').value = (p.freq === 'session' || p.freq === 'always') ? p.freq : 'day';
+
+    var goto = p.goto || 'all';
+    var opts = '<option value="all"' + (goto === 'all' ? ' selected' : '') + '>Cardápio (tudo)</option>';
+    if (catList().length) {
+      opts += '<optgroup label="Categorias">' + catList().map(function (c) {
+        return '<option value="' + esc(c.id) + '"' + (goto === c.id ? ' selected' : '') + '>' +
+          esc(c.label) + '</option>';
+      }).join('') + '</optgroup>';
+    }
+    var prods = state.products || [];
+    if (prods.length) {
+      opts += '<optgroup label="Produtos">' + prods.map(function (pr) {
+        return '<option value="p:' + esc(pr.id) + '"' + (goto === 'p:' + pr.id ? ' selected' : '') + '>' +
+          esc(pr.name) + '</option>';
+      }).join('') + '</optgroup>';
+    }
+    $('#ppGoto').innerHTML = opts;
+    renderPopupImg(p.img || '');
+  }
+
+  function renderPopupImg(path) {
+    var img = $('#ppImg');
+    var no = $('#ppNoImg');
+    $('#popupBox').setAttribute('data-img', path || '');
+    if (path) {
+      img.src = imgSrc(path);
+      img.hidden = false;
+      no.hidden = true;
+    } else {
+      img.removeAttribute('src');
+      img.hidden = true;
+      no.hidden = false;
+    }
+  }
+
+  function readPopup() {
+    return {
+      active: $('#ppActive').checked,
+      title: $('#ppTitle').value.trim(),
+      text: $('#ppText').value.trim(),
+      btn: $('#ppBtn').value.trim(),
+      goto: $('#ppGoto').value || 'all',
+      freq: $('#ppFreq').value,
+      img: $('#popupBox').getAttribute('data-img') || ''
+    };
+  }
+
+  $('#ppFile').addEventListener('change', function (e) {
+    var file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    uploadFile(file, function (path) {
+      renderPopupImg(path);
+      toast('Imagem do pop-up atualizada');
     });
   });
 
@@ -1334,6 +1401,7 @@
         roadFactor: parseFloat($('#stRoad').value) || 1.3
       },
       banners: readBanners(),
+      popup: readPopup(),
       popular: popularSel(),
       sizes: readSizes(),
       extras: readExtras(),

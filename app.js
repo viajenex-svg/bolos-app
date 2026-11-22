@@ -515,6 +515,59 @@
   var promoIdx = 0;
   var promoTimer = null;
 
+  /* ---------------- anúncio em pop-up ---------------- */
+
+  var POPUP = null;
+  var popupSig = '';
+  var adShown = false;
+  var adTimer = null;
+
+  function adKey(p) {
+    return 'ad:' + (String(p.title || '') + '|' + String(p.text || '') + '|' + String(p.img || '')).slice(0, 100);
+  }
+
+  function adDue(p) {
+    try {
+      if (p.freq === 'session') return !sessionStorage.getItem(adKey(p));
+      var last = Number(localStorage.getItem(adKey(p)) || 0);
+      if (!last) return true;
+      return p.freq === 'always' ? Date.now() - last > 60000 : Date.now() - last > 86400000;
+    } catch (e) { return true; }
+  }
+
+  function adMark(p) {
+    try {
+      if (p.freq === 'session') sessionStorage.setItem(adKey(p), '1');
+      else localStorage.setItem(adKey(p), String(Date.now()));
+    } catch (e) { /* modo privado: mostra de novo */ }
+  }
+
+  function scheduleAd() {
+    if (!POPUP || POPUP.active === false || adShown || !adDue(POPUP)) return;
+    clearTimeout(adTimer);
+    adTimer = setTimeout(function () {
+      if (adShown || !POPUP || POPUP.active === false) return;
+      if (openStack.length || current !== 'home') return;
+      showAd(POPUP);
+    }, 1100);
+  }
+
+  function showAd(p) {
+    adShown = true;
+    adMark(p);
+    var img = $('#adImg');
+    if (p.img) { img.src = p.img; img.hidden = false; }
+    else { img.hidden = true; img.removeAttribute('src'); }
+    var title = $('#adTitle');
+    title.textContent = p.title || '';
+    title.hidden = !p.title;
+    var text = $('#adText');
+    text.textContent = p.text || '';
+    text.hidden = !p.text;
+    $('#adBtn').textContent = p.btn || 'Ver cardápio';
+    openSheet($('#adSheet'));
+  }
+
   function renderPromos() {
     var track = $('#promoTrack');
     var wrap = $('#promoSlider');
@@ -1785,6 +1838,21 @@
   $('#psClose').addEventListener('click', closeSheets);
   $('#searchClose').addEventListener('click', closeSheets);
   $('#coClose').addEventListener('click', closeSheets);
+  $('#adClose').addEventListener('click', closeSheets);
+  $('#adDismiss').addEventListener('click', closeSheets);
+
+  $('#adBtn').addEventListener('click', function () {
+    var goto = POPUP && POPUP.goto ? POPUP.goto : 'all';
+    closeSheets();
+    if (goto.indexOf('p:') === 0) { openProduct(goto.slice(2)); return; }
+    if (goto !== 'all') {
+      activeCat = goto;
+      renderChips();
+      renderPopular();
+      renderMenu();
+    }
+    go('menu');
+  });
 
   doc.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && openStack.length) {
@@ -1879,6 +1947,15 @@
       if (Array.isArray(s.banners)) {
         var sig = JSON.stringify(s.banners);
         if (sig !== bannersSig) { bannersSig = sig; BANNERS = s.banners; renderPromos(); }
+      }
+      if (s.popup && typeof s.popup === 'object') {
+        var psig = JSON.stringify(s.popup);
+        if (psig !== popupSig) {
+          popupSig = psig;
+          POPUP = s.popup;
+          adShown = false;
+          scheduleAd();
+        }
       }
       if (Array.isArray(s.extras)) EXTRAS = s.extras;
       if (Array.isArray(s.categories) && s.categories.length) setCats(s.categories);

@@ -77,6 +77,13 @@ DEFAULT_BANNERS = [
 
 BANNER_FIELDS = (('tag', 24), ('title', 40), ('off', 20), ('sub', 60),
                  ('btn', 24), ('img', 200), ('pname', 60))
+
+# anúncio em pop-up mostrado ao cliente (configurado no painel)
+DEFAULT_POPUP = {
+    'active': False, 'title': '', 'text': '', 'img': '', 'btn': '',
+    'goto': 'all', 'freq': 'day',
+}
+POPUP_FIELDS = (('title', 40), ('text', 120), ('img', 200), ('btn', 24))
 # categorias do cardápio (editáveis no painel: criar, renomear e excluir)
 DEFAULT_CATS = [
     {'id': 'bolos', 'label': 'Bolos', 'short': ''},
@@ -235,6 +242,7 @@ DEFAULT = {
         'originLon': None,
         'delivery': dict(DEFAULT_DELIVERY),
         'banners': [dict(b) for b in DEFAULT_BANNERS],
+        'popup': dict(DEFAULT_POPUP),
         'extras': [dict(e) for e in DEFAULT_EXTRAS],
         'sizes': [dict(s) for s in DEFAULT_SIZES],
         'categories': [dict(c) for c in DEFAULT_CATS],
@@ -466,6 +474,7 @@ def public_menu(data):
     store['delivery'] = delivery_cfg(st)
     bans = banners_cfg(st)
     store['banners'] = [b for b in bans if b.get('active') is not False]
+    store['popup'] = popup_cfg(st)
     store['extras'] = extras_cfg(st)
     store['sizes'] = sizes_cfg(st)
     store['categories'] = cats_cfg(st)
@@ -660,6 +669,29 @@ def banners_cfg(st, raw=None):
         item['id'] = bid
         out.append(item)
     return out
+
+
+def popup_cfg(st, raw=None):
+    """Anúncio em pop-up do app, sanitizado. Sem título nem imagem = não aparece."""
+    src = raw if isinstance(raw, dict) else (st.get('popup') if isinstance(st, dict) else None)
+    if not isinstance(src, dict):
+        src = {}
+    item = {}
+    for k, limit in POPUP_FIELDS:
+        item[k] = str(src.get(k) or '').strip()[:limit]
+    item['active'] = bool(src.get('active')) and bool(item['title'] or item['img'])
+
+    goto = str(src.get('goto') or '').strip()
+    allowed = {'all'} | {c['id'] for c in cats_cfg(st)}
+    low = goto.lower()
+    if low.startswith('p:') and re.match(r'^[a-z0-9_-]{1,60}$', low[2:]):
+        item['goto'] = 'p:' + low[2:]
+    else:
+        item['goto'] = low if low in allowed else 'all'
+
+    freq = src.get('freq')
+    item['freq'] = freq if freq in ('day', 'session', 'always') else 'day'
+    return item
 
 
 def banner_products(st, bans=None):
@@ -1340,6 +1372,8 @@ class Handler(BaseHTTPRequestHandler):
             st['extras'] = extras_cfg(st, b['extras'])
         if isinstance(b.get('categories'), list):
             st['categories'] = cats_cfg(st, b['categories'])
+        if isinstance(b.get('popup'), dict):
+            st['popup'] = popup_cfg(st, b['popup'])
         if isinstance(b.get('sizes'), list):
             st['sizes'] = sizes_cfg(st, b['sizes'])
         if isinstance(b.get('popular'), list):

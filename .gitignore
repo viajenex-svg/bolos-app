@@ -4,3 +4,7 @@ data.json.tmp
 geo-cache.json
 __pycache__/
 *.pyc
+deploy-fly.sh
+Dockerfile
+fly.toml
+.dockerignore

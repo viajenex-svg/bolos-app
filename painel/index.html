@@ -180,6 +180,33 @@
       <div class="banners" id="bannerList"></div>
       <button class="btn ghost small" id="addBanner" type="button">+ Adicionar banner</button>
 
+      <h3 class="sub">Anúncio em pop-up</h3>
+      <p class="fee-hint">Um cartaz que abre sozinho na tela do cliente. Use para promoção do dia, novidade ou aviso. Sem título e sem imagem ele não aparece, mesmo ativo.</p>
+      <div class="bn-row" id="popupBox">
+        <div class="bn-top">
+          <b>Pop-up</b>
+          <label class="check bn-check"><input type="checkbox" id="ppActive"> <span>Ativo</span></label>
+        </div>
+        <div class="bn-img">
+          <span class="bn-noimg" id="ppNoImg">sem imagem</span>
+          <img id="ppImg" alt="" hidden>
+          <label class="btn ghost small">Enviar imagem<input type="file" id="ppFile" accept="image/*" hidden></label>
+        </div>
+        <label class="field"><span>Título</span><input id="ppTitle" type="text" maxlength="40" placeholder="Ex.: Cupom de hoje 🎉"></label>
+        <label class="field"><span>Texto</span><textarea id="ppText" maxlength="120" rows="2" placeholder="Ex.: 10% off em qualquer bolo até 18h. Use o cupom BOLO10."></textarea></label>
+        <div class="two">
+          <label class="field"><span>Texto do botão</span><input id="ppBtn" type="text" maxlength="24" placeholder="Ver oferta"></label>
+          <label class="field"><span>Ao tocar no botão</span><select id="ppGoto"></select></label>
+        </div>
+        <label class="field"><span>Com que frequência aparece</span>
+          <select id="ppFreq">
+            <option value="day">1 vez por dia</option>
+            <option value="session">1 vez por visita</option>
+            <option value="always">Toda vez que abrir</option>
+          </select>
+        </label>
+      </div>
+
       <h3 class="sub">Mais pedidos da home</h3>
       <p class="fee-hint">Toque nos produtos que devem aparecer primeiro no bloco “Mais pedidos” (a ordem é a dos toques). O app completa o resto sozinho, do mais vendido para o menos vendido.</p>
       <div class="pop-chips" id="popularPick"></div>

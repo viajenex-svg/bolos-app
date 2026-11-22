@@ -296,6 +296,8 @@ button { cursor: pointer; }
   font-size: 11px; color: var(--muted);
 }
 
+.bn-img img[hidden], .bn-noimg[hidden] { display: none; }
+
 .bn-empty { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
 
 .fee-hint { font-size: 12px; color: var(--muted); margin: 0; }

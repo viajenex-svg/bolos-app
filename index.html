@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=25">
+  <link rel="stylesheet" href="style.css?v=26">
 </head>
 <body>
 
@@ -421,6 +421,16 @@
     </div>
   </div>
 
+  <!-- anúncio em pop-up -->
+  <div class="sheet sheet-center ad-sheet" id="adSheet" role="dialog" aria-modal="true" hidden>
+    <button class="sheet-x" id="adClose" type="button" aria-label="Fechar anúncio">✕</button>
+    <img class="ad-img" id="adImg" alt="" hidden>
+    <h2 id="adTitle"></h2>
+    <p id="adText"></p>
+    <button class="btn btn-solid btn-block" id="adBtn" type="button">Ver cardápio</button>
+    <button class="btn btn-ghost btn-block" id="adDismiss" type="button">Agora não</button>
+  </div>
+
   <!-- sucesso -->
   <div class="sheet sheet-center" id="successSheet" role="dialog" aria-modal="true" hidden>
     <div class="success-ico">✓</div>
@@ -442,6 +452,6 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </div>
 
-<script src="app.js?v=34"></script>
+<script src="app.js?v=35"></script>
 </body>
 </html>
