@@ -1818,3 +1818,14 @@ input[type="text"], input[type="search"], textarea { font-size: 16px; }
 
 .legal-note { color: var(--muted); font-size: 12.5px; line-height: 1.5; text-align: center; margin: 12px 6px 0; }
 .legal-note a { color: var(--accent-dark); font-weight: 600; }
+
+/* ---------------- boas-vindas (nome antes de entrar) ---------------- */
+
+.welcome-logo {
+  width: 76px; height: 76px; border-radius: 50%; object-fit: cover;
+  margin: 0 auto 14px; display: block; background: var(--bg-2);
+}
+.welcome-field { text-align: left; margin: 18px 0 6px; }
+.welcome-sheet .af-input { text-align: center; font-size: 16px; }
+.welcome-err { font-size: 12.5px; color: #c0392b; margin-top: 8px; }
+.welcome-sheet .btn { margin-top: 16px; }

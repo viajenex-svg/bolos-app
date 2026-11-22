@@ -182,6 +182,7 @@
     favs: [],
     orders: [],
     coupon: null,
+    customer: '',
     addresses: [],
     addr: { id: '', title: 'Casa', name: '', cep: '', street: '', district: '', city: '',
             state: '', number: '', complement: '', phone: '',
@@ -496,9 +497,13 @@
     host.innerHTML = bar + blocks;
   }
 
+  function customerName() {
+    var n = (store.customer || (store.addr && store.addr.name) || '');
+    return n.trim();
+  }
+
   function firstName() {
-    var n = (store.addr && store.addr.name) || '';
-    return n.trim().split(/\s+/)[0] || '';
+    return customerName().split(/\s+/)[0] || '';
   }
 
   function renderGreeting() {
@@ -1697,7 +1702,7 @@
   /* ---------------- perfil ---------------- */
 
   function renderProfile() {
-    var nome = ((store.addr && store.addr.name) || '').trim();
+    var nome = customerName();
     $('#profileName').textContent = nome || 'Seu perfil';
     $('#profileAvatar').textContent = nome ? nome.charAt(0).toUpperCase() : '?';
     $('#profileAddr').textContent = store.addr.text;
@@ -1825,6 +1830,7 @@
 
   var scrim = $('#scrim');
   var openStack = [];
+  var gateOpen = false;   /* pop-up de boas-vindas bloqueando o app */
 
   function openSheet(el) {
     closeSheets(true);
@@ -1836,6 +1842,7 @@
   }
 
   function closeSheets(keepScrim) {
+    if (gateOpen) return;
     openStack.forEach(function (el) {
       el.hidden = true;
       el.removeAttribute('data-open');
@@ -1847,7 +1854,7 @@
     }
   }
 
-  scrim.addEventListener('click', function () { closeSheets(); });
+  scrim.addEventListener('click', function () { if (!gateOpen) closeSheets(); });
 
   $('#psClose').addEventListener('click', closeSheets);
   $('#searchClose').addEventListener('click', closeSheets);
@@ -1870,9 +1877,44 @@
 
   doc.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && openStack.length) {
-      if (openStack[0] === $('#checkoutSheet')) return;
+      if (gateOpen || openStack[0] === $('#checkoutSheet')) return;
       closeSheets();
     }
+  });
+
+  /* ---------------- boas-vindas (nome antes de entrar) ---------------- */
+
+  function openWelcome() {
+    gateOpen = true;
+    var lg = $('#welcomeLogo');
+    if (STORE.logo) { lg.src = STORE.logo; lg.hidden = false; }
+    else lg.hidden = true;
+    $('#welcomeName').value = customerName();
+    $('#welcomeErr').hidden = true;
+    openSheet($('#welcomeSheet'));
+    setTimeout(function () { $('#welcomeName').focus(); }, 350);
+  }
+
+  function saveWelcome() {
+    var name = $('#welcomeName').value.trim().replace(/\s+/g, ' ');
+    if (!name) {
+      $('#welcomeErr').hidden = false;
+      $('#welcomeName').focus();
+      return;
+    }
+    store.customer = name;
+    save();
+    gateOpen = false;
+    closeSheets();
+    renderGreeting();
+    if (current === 'profile') renderProfile();
+    scheduleAd();
+    toast('Bem-vindo(a), ' + firstName() + '! 🍰');
+  }
+
+  $('#welcomeBtn').addEventListener('click', saveWelcome);
+  $('#welcomeName').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); saveWelcome(); }
   });
 
   $('#locBtn').addEventListener('click', function () {
@@ -2047,6 +2089,14 @@
 
   /* ---------------- boot ---------------- */
 
+  /* ?reset=1 limpa o nome salvo — só para testar a tela de boas-vindas */
+  if (/[?&]reset=1\b/.test(location.search)) {
+    store.customer = '';
+    if (store.addr) store.addr.name = '';
+    save();
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+  }
+
   $('#locLabel').textContent = store.addr.text.split('—')[0].trim();
   $('#profileAddr').textContent = store.addr.text;
   $('#notifToggle').checked = store.notif !== false;
@@ -2057,6 +2107,8 @@
   renderCart();
   resumeOrderPolls();
   refreshMenu();
+
+  if (!customerName()) setTimeout(openWelcome, 450);
 
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) return;
