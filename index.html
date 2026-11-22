@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=27">
+  <link rel="stylesheet" href="style.css?v=28">
 </head>
 <body>
 
@@ -161,6 +161,8 @@
       </button>
     </div>
 
+    <button class="link profile-name-btn" id="editNameBtn" type="button">Trocar meu nome</button>
+
     <div class="stats">
       <div><b id="statOrders">0</b><span>pedidos</span></div>
       <div><b id="statFavs">0</b><span>favoritos</span></div>
@@ -267,8 +269,9 @@
   <!-- boas-vindas: pede o nome antes de entrar -->
   <div class="sheet sheet-center welcome-sheet" id="welcomeSheet" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle" hidden>
     <img class="welcome-logo" id="welcomeLogo" alt="" hidden>
+    <span class="welcome-thanks">Obrigado pela preferência! 🍰</span>
     <h2 id="welcomeTitle">Como podemos te chamar?</h2>
-    <p>Seu nome aparece na saudação e agiliza o pedido.</p>
+    <p>Seu nome aparece na saudação e já vem preenchido na entrega.</p>
     <label class="af-label welcome-field" for="welcomeName">Seu nome</label>
     <input id="welcomeName" class="af-input" type="text" maxlength="40" autocomplete="given-name" placeholder="Ex.: Maria">
     <p class="welcome-err" id="welcomeErr" hidden>Digite seu nome para entrar.</p>
@@ -463,6 +466,6 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </div>
 
-<script src="app.js?v=37"></script>
+<script src="app.js?v=38"></script>
 </body>
 </html>

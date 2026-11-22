@@ -1094,7 +1094,7 @@
   function fillAddrForm(a) {
     $('#afCep').value = a.cep ? a.cep.slice(0, 5) + '-' + a.cep.slice(5) : '';
     $('#afStreet').value = a.street || '';
-    $('#afName').value = a.name || '';
+    $('#afName').value = a.name || customerName();
     $('#afNum').value = a.number || '';
     $('#afComp').value = a.complement || '';
     $('#afPhone').value = a.phone || '';
@@ -1319,6 +1319,7 @@
 
     setAddr(a);
     addrEditingId = a.id;
+    if (!store.customer) { store.customer = a.name; save(); }
 
     leaveAddressSheet();
     toast(it >= 0 ? 'Endereço atualizado' : 'Endereço salvo');
@@ -1884,13 +1885,15 @@
 
   /* ---------------- boas-vindas (nome antes de entrar) ---------------- */
 
-  function openWelcome() {
-    gateOpen = true;
+  function openWelcome(isGate) {
+    gateOpen = !!isGate;
     var lg = $('#welcomeLogo');
     if (STORE.logo) { lg.src = STORE.logo; lg.hidden = false; }
     else lg.hidden = true;
     $('#welcomeName').value = customerName();
     $('#welcomeErr').hidden = true;
+    $('#welcomeBtn').textContent = isGate ? 'Entrar' : 'Salvar nome';
+    $('#welcomeSheet .welcome-thanks').hidden = !isGate;
     openSheet($('#welcomeSheet'));
     setTimeout(function () { $('#welcomeName').focus(); }, 350);
   }
@@ -1902,20 +1905,25 @@
       $('#welcomeName').focus();
       return;
     }
+    var wasGate = gateOpen;
+    var antes = customerName();
     store.customer = name;
+    /* mantém o nome da entrega em dia, a menos que tenha sido personalizado */
+    if (store.addr && (!store.addr.name || store.addr.name === antes)) store.addr.name = name;
     save();
     gateOpen = false;
     closeSheets();
     renderGreeting();
     if (current === 'profile') renderProfile();
     scheduleAd();
-    toast('Bem-vindo(a), ' + firstName() + '! 🍰');
+    toast(wasGate ? 'Bem-vindo(a), ' + firstName() + '! 🍰' : 'Nome atualizado ✔');
   }
 
   $('#welcomeBtn').addEventListener('click', saveWelcome);
   $('#welcomeName').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); saveWelcome(); }
   });
+  $('#editNameBtn').addEventListener('click', function () { openWelcome(false); });
 
   $('#locBtn').addEventListener('click', function () {
     openAddressSheet(function () {
@@ -2108,7 +2116,7 @@
   resumeOrderPolls();
   refreshMenu();
 
-  if (!customerName()) setTimeout(openWelcome, 450);
+  if (!customerName()) setTimeout(function () { openWelcome(true); }, 450);
 
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) return;
