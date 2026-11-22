@@ -1137,6 +1137,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
   backdrop-filter: blur(2px);
   animation: fadeIn .22s ease;
 }
+.scrim[hidden] { display: none; }
 
 @keyframes fadeIn { from { opacity: 0; } }
 

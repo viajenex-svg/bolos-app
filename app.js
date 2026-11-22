@@ -1843,6 +1843,7 @@
   }
 
   function closeSheets(keepScrim) {
+    keepScrim = keepScrim === true;   /* ouvinte de clique passa o evento aqui */
     if (gateOpen) return;
     openStack.forEach(function (el) {
       el.hidden = true;
@@ -1857,11 +1858,11 @@
 
   scrim.addEventListener('click', function () { if (!gateOpen) closeSheets(); });
 
-  $('#psClose').addEventListener('click', closeSheets);
-  $('#searchClose').addEventListener('click', closeSheets);
-  $('#coClose').addEventListener('click', closeSheets);
-  $('#adClose').addEventListener('click', closeSheets);
-  $('#adDismiss').addEventListener('click', closeSheets);
+  $('#psClose').addEventListener('click', function () { closeSheets(); });
+  $('#searchClose').addEventListener('click', function () { closeSheets(); });
+  $('#coClose').addEventListener('click', function () { closeSheets(); });
+  $('#adClose').addEventListener('click', function () { closeSheets(); });
+  $('#adDismiss').addEventListener('click', function () { closeSheets(); });
 
   $('#adBtn').addEventListener('click', function () {
     var goto = POPUP && POPUP.goto ? POPUP.goto : 'all';
