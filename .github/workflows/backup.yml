@@ -1,0 +1,27 @@
+name: backup
+
+# Backup diário do banco (Neon): baixa /api/admin/backup e guarda como artefato.
+on:
+  schedule:
+    - cron: '17 6 * * *'   # 03:17 em Brasília (UTC-3)
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar backup
+        env:
+          SC_PIN: ${{ secrets.SC_PIN }}
+        run: |
+          curl -fsS --max-time 120 \
+            -H "X-Pin: $SC_PIN" \
+            -o backup-bolos.json \
+            https://delicias-bolos.onrender.com/api/admin/backup
+          python3 -c "import json; d=json.load(open('backup-bolos.json')); print('ok:', len(d.get('orders', [])), 'pedido(s),', len(d.get('products', [])), 'produto(s)')"
+      - name: Guardar artefato (90 dias)
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-bolos
+          path: backup-bolos.json
+          retention-days: 90

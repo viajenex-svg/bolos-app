@@ -10,6 +10,7 @@ Só usa a biblioteca padrão. PIL é opcional (regenera ícones ao trocar o logo
 """
 
 import base64
+import hmac
 import json
 import math
 import os
@@ -834,6 +835,30 @@ def rate_ok(ip, limit=120, window=60):
         return len(hits) <= limit
 
 
+_PIN_FAIL = {}
+_PIN_LOCK = threading.Lock()
+
+
+def pin_ok(ip, pin):
+    """Confere o PIN bloqueando força bruta: 10 erros por IP a cada 15 min."""
+    now = time.time()
+    with _PIN_LOCK:
+        fails = [t for t in _PIN_FAIL.get(ip, []) if now - t < 900]
+        _PIN_FAIL[ip] = fails
+        if len(fails) >= 10:
+            return False
+    ok = hmac.compare_digest(str(pin or ''), PIN)
+    with _PIN_LOCK:
+        if not ok:
+            _PIN_FAIL.setdefault(ip, []).append(now)
+        else:
+            _PIN_FAIL.pop(ip, None)
+        if len(_PIN_FAIL) > 500:
+            for k in list(_PIN_FAIL)[:100]:
+                _PIN_FAIL.pop(k, None)
+    return ok
+
+
 def _geo_ent_json(cep, r):
     return {'ok': bool(r.get('addr')), 'cep': cep, 'addr': r.get('addr'),
             'lat': r.get('lat'), 'lon': r.get('lon'),
@@ -985,7 +1010,7 @@ class Handler(BaseHTTPRequestHandler):
         self._json({'error': msg}, code)
 
     def _auth(self):
-        return self.headers.get('X-Pin', '') == PIN
+        return hmac.compare_digest(str(self.headers.get('X-Pin', '')), PIN)
 
     def _need_auth(self):
         if not self._auth():
@@ -1035,13 +1060,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def _api_get(self, path, query=None):
         query = query or {}
+
+        # ping sem tocar no banco: o uptime check mantém o Render acordado
+        # e deixa o Neon suspender quando a loja está sem movimento
+        if path == '/api/ping':
+            return self._json({'ok': True, 'ts': int(time.time())})
+
         data = load()
 
         if path == '/api/menu':
             return self._json(public_menu(data))
-
-        if path == '/api/ping':
-            return self._json({'ok': True, 'ts': int(time.time())})
 
         m = re.match(r'^/api/order/([^/]+)$', path)
         if m:
@@ -1091,6 +1119,21 @@ class Handler(BaseHTTPRequestHandler):
             if not self._need_auth():
                 return
             return self._json({'orders': data.get('orders', [])})
+
+        if path == '/api/admin/backup':
+            if not self._need_auth():
+                return
+            body = json.dumps(data, ensure_ascii=False, indent=1).encode('utf-8')
+            stamp = time.strftime('%Y-%m-%d')
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Content-Disposition',
+                             'attachment; filename="backup-bolos-%s.json"' % stamp)
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            self.wfile.write(body)
+            return
 
         if path == '/api/admin/geo/test':
             if not self._need_auth():
@@ -1171,7 +1214,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == '/api/auth':
             b = self._body()
-            if (b.get('pin') or '') == PIN:
+            if pin_ok(self.client_address[0], b.get('pin')):
                 return self._json({'ok': True})
             return self._err(401, 'PIN incorreto')
 

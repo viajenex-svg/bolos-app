@@ -19,11 +19,11 @@
     <p>Preços, fotos, logo e estoque.</p>
     <label class="field">
       <span>PIN de administrador</span>
-      <input id="pinInput" type="password" inputmode="numeric" placeholder="••••" maxlength="12" autocomplete="one-time-code" enterkeyhint="done" required>
+      <input id="pinInput" type="password" placeholder="••••••••" maxlength="32" autocomplete="off" enterkeyhint="done" required>
     </label>
     <button class="btn solid block" type="submit">Entrar</button>
     <p class="login-err" id="loginErr" hidden>PIN incorreto. Tente de novo.</p>
-    <small class="login-foot">Padrão: 1234 — mude com a variável <code>SC_PIN</code>.</small>
+    <small class="login-foot">PIN definido pelo administrador (variável <code>SC_PIN</code>).</small>
   </form>
 </div>
 
