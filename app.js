@@ -496,11 +496,21 @@
     host.innerHTML = bar + blocks;
   }
 
-  function renderHome() {
+  function firstName() {
+    var n = (store.addr && store.addr.name) || '';
+    return n.trim().split(/\s+/)[0] || '';
+  }
+
+  function renderGreeting() {
     var h = new Date().getHours();
     var greet = h < 5 ? 'Boa madrugada' : h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+    var nome = firstName();
     var h1 = $('.home-greet h1');
-    if (h1) h1.innerHTML = greet + ', <em>Aleff</em> 👋';
+    if (h1) h1.innerHTML = greet + (nome ? ', <em>' + esc(nome) + '</em>' : '') + ' 👋';
+  }
+
+  function renderHome() {
+    renderGreeting();
     renderChips();
     renderPopular();
     renderHomeCats();
@@ -1128,6 +1138,7 @@
     $('#locLabel').textContent = a.text ? a.text.split('—')[0].trim() : 'Entregar em';
     $('#profileAddr').textContent = a.text || 'Definir endereço';
     renderSavedAddrs();
+    renderGreeting();
     if (current === 'profile') renderProfile();
     if (a.cep) {
       geoFee(true).then(function () {
@@ -1686,6 +1697,9 @@
   /* ---------------- perfil ---------------- */
 
   function renderProfile() {
+    var nome = ((store.addr && store.addr.name) || '').trim();
+    $('#profileName').textContent = nome || 'Seu perfil';
+    $('#profileAvatar').textContent = nome ? nome.charAt(0).toUpperCase() : '?';
     $('#profileAddr').textContent = store.addr.text;
     $('#statOrders').textContent = String(store.orders.length);
     $('#statFavs').textContent = String(store.favs.length);
