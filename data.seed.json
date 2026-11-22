@@ -1,0 +1,465 @@
+{
+ "store": {
+  "name": "Delícias do Aleff · Bolos",
+  "tagline": "Bolos caseiros, feitos no dia.",
+  "logo": "uploads/pda8dc622e2.webp",
+  "fee": 6.9,
+  "minOrder": 20.0,
+  "whatsapp": "81988292421",
+  "open": true,
+  "hours": "Seg a Sáb, 9h às 19h",
+  "hoursAuto": false,
+  "schedule": [
+   {
+    "closed": false,
+    "from": "09:00",
+    "to": "19:00"
+   },
+   {
+    "closed": false,
+    "from": "09:00",
+    "to": "19:00"
+   },
+   {
+    "closed": false,
+    "from": "09:00",
+    "to": "19:00"
+   },
+   {
+    "closed": false,
+    "from": "09:00",
+    "to": "19:00"
+   },
+   {
+    "closed": false,
+    "from": "09:00",
+    "to": "19:00"
+   },
+   {
+    "closed": false,
+    "from": "09:00",
+    "to": "19:00"
+   },
+   {
+    "closed": false,
+    "from": "09:00",
+    "to": "19:00"
+   }
+  ],
+  "address": "Rua das Brasas, 128 — Centro",
+  "originCep": "",
+  "originLat": null,
+  "originLon": null,
+  "delivery": {
+   "mode": "fixed",
+   "base": 3.0,
+   "perKm": 2.0,
+   "minFee": 6.9,
+   "maxKm": 0.0,
+   "roadFactor": 1.3
+  },
+  "banners": [
+   {
+    "tag": "Feito no dia",
+    "title": "",
+    "off": "CASEIROS",
+    "sub": "",
+    "btn": "Pedir agora",
+    "img": "uploads/pb5c4e6b8db.webp",
+    "pname": "",
+    "active": true,
+    "goto": "bebidas",
+    "ar": 2.153,
+    "price": 26.0,
+    "id": "feito-no-dia"
+   },
+   {
+    "tag": "",
+    "title": "",
+    "off": "",
+    "sub": "",
+    "btn": "",
+    "img": "uploads/p177ea2676c.webp",
+    "pname": "",
+    "active": true,
+    "goto": "bebidas",
+    "ar": 2.157,
+    "price": 9.0,
+    "id": "banner"
+   },
+   {
+    "tag": "",
+    "title": "",
+    "off": "",
+    "sub": "",
+    "btn": "",
+    "img": "uploads/p539a9763a2.webp",
+    "pname": "",
+    "active": true,
+    "goto": "bolos",
+    "ar": 2.157,
+    "price": 9.0,
+    "id": "banner-2"
+   }
+  ],
+  "extras": [
+   {
+    "id": "vela",
+    "label": "Vela de aniversário",
+    "price": 0.0
+   },
+   {
+    "id": "choco",
+    "label": "Chocolate extra",
+    "price": 8.0
+   },
+   {
+    "id": "morango",
+    "label": "Morangos frescos",
+    "price": 12.0
+   },
+   {
+    "id": "cartao",
+    "label": "Cartãozinho",
+    "price": 0.0
+   },
+   {
+    "id": "presente",
+    "label": "Embalagem de presente",
+    "price": 5.0
+   },
+   {
+    "id": "talheres",
+    "label": "Talheres e guardanapos",
+    "price": 1.0
+   },
+   {
+    "id": "sache",
+    "label": "Sachês (açúcar/adoçante)",
+    "price": 0.0
+   },
+   {
+    "id": "sach-catchup-maionese",
+    "label": "Sachê ( catchup maionese)",
+    "price": 0.0
+   }
+  ],
+  "sizes": [
+   {
+    "id": "p",
+    "label": "Pequeno · 12 fatias",
+    "extra": 0.0
+   },
+   {
+    "id": "m",
+    "label": "Médio · 20 fatias",
+    "extra": 40.0
+   },
+   {
+    "id": "g",
+    "label": "Grande · 30 fatias",
+    "extra": 80.0
+   }
+  ],
+  "coupons": {
+   "BOLO10": 0.1,
+   "FESTA15": 0.15,
+   "ALEF10": 0.1
+  },
+  "popular": [
+   "bolo-morango"
+  ],
+  "categories": [
+   {
+    "id": "bolos",
+    "label": "Bolos",
+    "short": "",
+    "icon": "🎂"
+   },
+   {
+    "id": "fatias",
+    "label": "Fatias",
+    "short": "",
+    "icon": "🍰"
+   },
+   {
+    "id": "tortas",
+    "label": "Tortas",
+    "short": "",
+    "icon": "🥧"
+   },
+   {
+    "id": "doces",
+    "label": "Docinhos",
+    "short": "Doces",
+    "icon": "🍫"
+   },
+   {
+    "id": "kits",
+    "label": "Kits festa",
+    "short": "Kits",
+    "icon": "🎁"
+   },
+   {
+    "id": "bebidas",
+    "label": "Trio sensação",
+    "short": "Trio",
+    "icon": "🥳"
+   },
+   {
+    "id": "bebidas-2",
+    "label": "Bebidas",
+    "short": "Bebidas",
+    "icon": "🥤"
+   }
+  ]
+ },
+ "products": [
+  {
+   "id": "bolo-choco",
+   "name": "TRIO FATIA DE MARACUJA COM CHOCOLATE",
+   "cat": "bebidas",
+   "price": 17.0,
+   "rating": 4.9,
+   "time": "Encomenda · 1 dia",
+   "kcal": 0,
+   "tag": "Mais pedido",
+   "img": "uploads/p246e2e9571.webp",
+   "active": true,
+   "stock": 8,
+   "sizes": [],
+   "desc": "Fatia 220g, coxinha 140g e refrigerante 200ml\nCaso deseje sache de Ketchup e Maionese, colocar na Observação do pedido.",
+   "extras": [
+    "talheres",
+    "sache"
+   ]
+  },
+  {
+   "id": "bolo-morango",
+   "name": "Bolo nova sensação",
+   "cat": "bolos",
+   "price": 10.0,
+   "rating": 4.9,
+   "time": "",
+   "kcal": 0,
+   "tag": "Da casa",
+   "img": "uploads/p5a87cb8ee7.webp",
+   "active": true,
+   "stock": 7,
+   "sizes": [],
+   "desc": "Massa chocolate, com recheio de morango e brigadeiro branco, 200g.",
+   "extras": [
+    "talheres"
+   ]
+  },
+  {
+   "id": "bolo-cenoura",
+   "name": "Trio vulcão sensação",
+   "cat": "bebidas",
+   "price": 69.9,
+   "rating": 4.8,
+   "time": "Encomenda · 1 dia",
+   "kcal": 0,
+   "tag": "",
+   "img": "uploads/p2d69f9da10.webp",
+   "active": true,
+   "stock": 11,
+   "sizes": [],
+   "desc": "Bolo de cenoura com pedaços, coberto com calda de chocolate meio amargo. O clássico da casa.",
+   "extras": [
+    "talheres"
+   ]
+  },
+  {
+   "id": "redvelvet",
+   "name": "Red Velvet",
+   "cat": "bebidas",
+   "price": 0.0,
+   "rating": 5.0,
+   "time": "Encomenda · 1 dia",
+   "kcal": 0,
+   "tag": "Especial",
+   "img": "uploads/p71861919ac.webp",
+   "active": true,
+   "stock": 6,
+   "sizes": [],
+   "desc": "Massa vermelha de cacau com cream cheese frosting e raspas de limão. Para ocasiões especiais.",
+   "extras": [
+    "talheres"
+   ]
+  },
+  {
+   "id": "fatia-choco",
+   "name": "Fatia de Chocolate",
+   "cat": "bebidas",
+   "price": 14.9,
+   "rating": 4.9,
+   "time": "30–40 min",
+   "kcal": 380,
+   "tag": "Quentinho",
+   "img": "uploads/p01ccc62315.webp",
+   "active": true,
+   "stock": 2,
+   "sizes": [],
+   "desc": "Fatia generosa do bolo de chocolate com brigadeiro e ganache. Servida gelada.",
+   "extras": [
+    "presente"
+   ]
+  },
+  {
+   "id": "fatia-morango",
+   "name": "Fatia de Morango",
+   "cat": "bebidas",
+   "price": 16.9,
+   "rating": 4.8,
+   "time": "30–40 min",
+   "kcal": 360,
+   "tag": "",
+   "img": "uploads/pbfbcbbb4fc.webp",
+   "active": true,
+   "stock": 2,
+   "sizes": [],
+   "desc": "Pão de ló, chantilly e morangos frescos em camadas. Doce na medida.",
+   "extras": null
+  },
+  {
+   "id": "torta-limao",
+   "name": "Guaraná antártica",
+   "cat": "bebidas-2",
+   "price": 18.9,
+   "rating": 4.8,
+   "time": "30–40 min",
+   "kcal": 0,
+   "tag": "",
+   "img": "uploads/p5a8f0d7798.webp",
+   "active": true,
+   "stock": 20,
+   "sizes": [],
+   "desc": "Base de biscoito, creme de limão siciliano e merengue maçaricado. Azedinho do jeito certo.",
+   "extras": [
+    "talheres"
+   ]
+  },
+  {
+   "id": "torta-maracuja",
+   "name": "Torta de Maracujá",
+   "cat": "bebidas",
+   "price": 20.0,
+   "rating": 4.7,
+   "time": "30–40 min",
+   "kcal": 350,
+   "tag": "Mas pedido",
+   "img": "uploads/p088dc39a1d.webp",
+   "active": true,
+   "stock": 20,
+   "sizes": [],
+   "desc": "Creme de maracujá com calda de sementes e base de biscoito. Refrescante.",
+   "extras": [
+    "talheres"
+   ]
+  },
+  {
+   "id": "brigadeiro",
+   "name": "Brigadeiro Gourmet (6)",
+   "cat": "doces",
+   "price": 18.0,
+   "rating": 5.0,
+   "time": "30–40 min",
+   "kcal": 420,
+   "tag": "Mais pedido",
+   "img": "uploads/pad02fc67f7.webp",
+   "active": true,
+   "stock": 5,
+   "desc": "Seis brigadeiros de chocolate nobre enrolados à mão, com granulado belga.",
+   "extras": null,
+   "sizes": null
+  },
+  {
+   "id": "beijinho",
+   "name": "Beijinho (6)",
+   "cat": "doces",
+   "price": 16.0,
+   "rating": 4.8,
+   "time": "30–40 min",
+   "kcal": 400,
+   "tag": "",
+   "img": "uploads/p0e7801f441.webp",
+   "active": true,
+   "stock": null,
+   "desc": "Seis beijinhos de coco\nDocinhos de festa feitos na casa.",
+   "extras": [
+    "sache"
+   ],
+   "sizes": []
+  },
+  {
+   "id": "kit-festa",
+   "name": "Kit Festa 20 pessoas",
+   "cat": "fatias",
+   "price": 249.0,
+   "rating": 4.9,
+   "time": "Encomenda · 2 dias",
+   "kcal": 0,
+   "tag": "Festa",
+   "img": "uploads/pe699ba3629.webp",
+   "active": true,
+   "stock": 5,
+   "sizes": [],
+   "desc": "Bolo médio, 40 docinhos sortidos, pratos, talheres e velas. Encomende com 2 dias.",
+   "extras": [
+    "talheres"
+   ]
+  },
+  {
+   "id": "cafe",
+   "name": "Café Coado 300 ml",
+   "cat": "bebidas-2",
+   "price": 6.9,
+   "rating": 4.7,
+   "time": "20–30 min",
+   "kcal": 90,
+   "tag": "",
+   "img": "uploads/ped300ae08b.webp",
+   "active": true,
+   "stock": 3,
+   "extras": [],
+   "sizes": [],
+   "desc": "Café coado na hora, torra média. Vem quente em copo térmico."
+  },
+  {
+   "id": "refri",
+   "name": "Refrigerante lata",
+   "cat": "doces",
+   "price": 6.0,
+   "rating": 4.5,
+   "time": "20–30 min",
+   "kcal": 140,
+   "tag": "",
+   "img": "uploads/p987e5e34e0.webp",
+   "active": true,
+   "stock": 5,
+   "extras": [],
+   "sizes": [],
+   "desc": "Lata de 350 ml bem gelada — cola, guaraná ou laranja. Avise o sabor na observação."
+  },
+  {
+   "id": "bolo-de-lim-o-com-amora",
+   "name": "Bolo de limão com amora",
+   "cat": "bebidas",
+   "price": 20.0,
+   "rating": 4.8,
+   "time": "Encomenda · 1 dia",
+   "kcal": 0,
+   "tag": "",
+   "img": "uploads/pa160911304.webp",
+   "desc": "Fatia de Bolo de limão com amora\n1 coxinha de frango com catupiry 140g\n1 refrigerante em lata 350ml",
+   "active": true,
+   "stock": 7,
+   "extras": [
+    "talheres"
+   ],
+   "sizes": []
+  }
+ ],
+ "orders": []
+}

@@ -1,0 +1,6 @@
+# estado local do app (na hospedagem os dados ficam no Neon)
+data.json
+data.json.tmp
+geo-cache.json
+__pycache__/
+*.pyc

@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Painel — Delícias do Aleff · Bolos</title>
+  <meta name="theme-color" content="#2B2118">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/painel/painel.css?v=26">
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div class="login" id="login">
+  <form class="login-card" id="loginForm" autocomplete="off">
+    <img class="login-logo" id="loginLogo" src="/icons/icon-192.png" alt="">
+    <h1>Painel da loja</h1>
+    <p>Preços, fotos, logo e estoque.</p>
+    <label class="field">
+      <span>PIN de administrador</span>
+      <input id="pinInput" type="password" inputmode="numeric" placeholder="••••" maxlength="12" autocomplete="one-time-code" enterkeyhint="done" required>
+    </label>
+    <button class="btn solid block" type="submit">Entrar</button>
+    <p class="login-err" id="loginErr" hidden>PIN incorreto. Tente de novo.</p>
+    <small class="login-foot">Padrão: 1234 — mude com a variável <code>SC_PIN</code>.</small>
+  </form>
+</div>
+
+<!-- ============ APP ============ -->
+<div class="app" id="app" hidden>
+
+  <header class="top">
+    <div class="brand">
+      <img id="brandLogo" src="/icons/icon-192.png" alt="">
+      <div class="brand-txt">
+        <b id="brandName">Delícias do Aleff · Bolos</b>
+        <small id="brandStatus">—</small>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="pill" id="openToggle" type="button">—</button>
+      <a class="pill ghost accent" href="/pedidos/" target="_blank" rel="noopener">Pedidos ao vivo ↗</a>
+      <a class="pill ghost" href="/" target="_blank" rel="noopener">Abrir app ↗</a>
+      <button class="pill ghost" id="logoutBtn" type="button">Sair</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button type="button" class="tab is-active" data-tab="produtos">Produtos</button>
+    <button type="button" class="tab" data-tab="estoque">Estoque</button>
+    <button type="button" class="tab" data-tab="pedidos">Pedidos <i class="dot-badge" id="ordersBadge" hidden>0</i></button>
+    <button type="button" class="tab" data-tab="caixa">Caixa</button>
+    <button type="button" class="tab" data-tab="loja">Loja</button>
+  </nav>
+
+  <main class="main">
+
+    <!-- PRODUTOS -->
+    <section class="panel" id="tab-produtos">
+      <div class="sec-head">
+        <div>
+          <h2>Cardápio</h2>
+          <p id="prodCount">—</p>
+        </div>
+        <button class="btn solid" id="newProduct" type="button">+ Novo produto</button>
+      </div>
+      <div class="grid" id="productGrid"></div>
+    </section>
+
+    <!-- ESTOQUE -->
+    <section class="panel" id="tab-estoque" hidden>
+      <div class="sec-head">
+        <div>
+          <h2>Estoque</h2>
+          <p>Salva sozinho a cada mudança. Deixe em branco para “ilimitado”.</p>
+        </div>
+      </div>
+      <div class="stock-list" id="stockList"></div>
+    </section>
+
+    <!-- PEDIDOS -->
+    <section class="panel" id="tab-pedidos" hidden>
+      <div class="sec-head">
+        <div><h2>Pedidos</h2><p>Atualiza a cada 15 segundos.</p></div>
+        <button class="btn ghost" id="refreshOrders" type="button">Atualizar</button>
+      </div>
+      <div class="orders" id="ordersList"></div>
+    </section>
+
+    <!-- CAIXA -->
+    <section class="panel" id="tab-caixa" hidden>
+      <div class="sec-head">
+        <div><h2>Caixa</h2><p>Faturamento dos pedidos recebidos.</p></div>
+      </div>
+
+      <div class="period" id="periodChips">
+        <button type="button" class="pchip is-on" data-period="today">Hoje</button>
+        <button type="button" class="pchip" data-period="week">7 dias</button>
+        <button type="button" class="pchip" data-period="month">30 dias</button>
+        <button type="button" class="pchip" data-period="all">Tudo</button>
+      </div>
+
+      <div class="kpis" id="kpis"></div>
+
+      <div class="cash-grid">
+        <div class="cash-card">
+          <h3>Por dia</h3>
+          <div class="bars" id="barsByDay"></div>
+        </div>
+        <div class="cash-card">
+          <h3>Pagamento</h3>
+          <div class="pay-break" id="payBreak"></div>
+        </div>
+      </div>
+
+      <div class="cash-card">
+        <h3>Mais vendidos</h3>
+        <div class="top-products" id="topProducts"></div>
+      </div>
+    </section>
+
+    <!-- LOJA -->
+    <section class="panel" id="tab-loja" hidden>
+      <div class="sec-head"><div><h2>Loja</h2><p>Identidade, entrega e cupons.</p></div></div>
+
+      <div class="store-card">
+        <div class="logo-box">
+          <img id="storeLogo" alt="Logo da loja">
+          <label class="btn ghost small">Trocar logo<input id="logoFile" type="file" accept="image/*" hidden></label>
+          <small>Vira também o ícone do app instalado.</small>
+        </div>
+        <div class="fields">
+          <label class="field"><span>Nome da loja</span><input id="stName" type="text" maxlength="60"></label>
+          <label class="field"><span>Slogan</span><input id="stTagline" type="text" maxlength="90"></label>
+          <div class="two">
+            <label class="field"><span>Taxa fixa / reserva (R$)</span><input id="stFee" type="number" min="0" step="0.1" inputmode="decimal"></label>
+            <label class="field"><span>Pedido mínimo (R$)</span><input id="stMin" type="number" min="0" step="0.5" inputmode="decimal"></label>
+          </div>
+          <label class="field"><span>WhatsApp (com DDI)</span><input id="stWa" type="tel" placeholder="5511999999999"></label>
+          <label class="field"><span>Horário (texto mostrado no app)</span><input id="stHours" type="text" maxlength="60"></label>
+
+          <label class="check"><input id="stHoursAuto" type="checkbox"> <span>Abrir e fechar sozinho pelo horário abaixo</span></label>
+          <div class="hours-grid" id="hoursGrid"></div>
+          <p class="fee-hint" id="hoursPreview"></p>
+
+          <label class="field"><span>Endereço padrão</span><input id="stAddr" type="text" maxlength="120"></label>
+
+          <h3 class="sub" style="margin:10px 0 0">Entrega por distância</h3>
+          <label class="field"><span>CEP da loja (origem)</span><input id="stOriginCep" type="text" inputmode="numeric" maxlength="9" placeholder="00000-000"></label>
+          <label class="field"><span>Como cobrar</span>
+            <select id="stMode">
+              <option value="fixed">Taxa fixa (só o valor acima)</option>
+              <option value="km">Por distância (base + por km)</option>
+            </select>
+          </label>
+          <div class="two">
+            <label class="field"><span>Taxa base (R$)</span><input id="stBase" type="number" min="0" step="0.5" inputmode="decimal"></label>
+            <label class="field"><span>Preço por km (R$)</span><input id="stPerKm" type="number" min="0" step="0.5" inputmode="decimal"></label>
+          </div>
+          <div class="two">
+            <label class="field"><span>Taxa mínima (R$)</span><input id="stMinFee" type="number" min="0" step="0.5" inputmode="decimal"></label>
+            <label class="field"><span>Distância máx. (km · 0 = sem limite)</span><input id="stMaxKm" type="number" min="0" max="100" step="0.5" inputmode="decimal"></label>
+          </div>
+          <label class="field"><span>Fator de estrada (1 a 3)</span><input id="stRoad" type="number" min="1" max="3" step="0.05" inputmode="decimal"></label>
+          <p class="fee-hint" id="feePreview"></p>
+
+          <label class="field"><span>Testar CEP de entrega</span>
+            <div class="fee-test">
+              <input id="testCep" type="text" inputmode="numeric" maxlength="9" placeholder="00000-000">
+              <button class="btn ghost small" id="testCepBtn" type="button">Testar</button>
+            </div>
+          </label>
+          <p class="fee-hint" id="testCepResult"></p>
+        </div>
+      </div>
+
+      <h3 class="sub">Banners da home (slide)</h3>
+      <p class="fee-hint">São os slides no topo do app. Com mais de um, o app troca sozinho e o cliente pode arrastar. Deixe os textos em branco para o slide ficar só com a imagem. Coloque um preço e um nome no cardápio para o banner também virar um produto comprável na categoria escolhida.</p>
+      <div class="banners" id="bannerList"></div>
+      <button class="btn ghost small" id="addBanner" type="button">+ Adicionar banner</button>
+
+      <h3 class="sub">Mais pedidos da home</h3>
+      <p class="fee-hint">Toque nos produtos que devem aparecer primeiro no bloco “Mais pedidos” (a ordem é a dos toques). O app completa o resto sozinho, do mais vendido para o menos vendido.</p>
+      <div class="pop-chips" id="popularPick"></div>
+      <p class="fee-hint" id="popularAuto"></p>
+
+      <h3 class="sub">Categorias do cardápio</h3>
+      <p class="fee-hint">Crie, renomeie ou exclua categorias. A abreviação é o texto dos botões redondos da home (ex.: “Kits festa” com abreviação “Kits”). Não dá para excluir uma categoria que ainda tem produtos.</p>
+      <div class="coupons" id="catList"></div>
+      <button class="btn ghost small" id="addCat" type="button">+ Adicionar categoria</button>
+
+      <h3 class="sub">Tamanhos do produto</h3>
+      <p class="fee-hint">Os tamanhos que aparecem na ficha de todo produto. O valor é somado ao preço. Deixe só os que usar.</p>
+      <div class="coupons" id="sizeList"></div>
+      <button class="btn ghost small" id="addSize" type="button">+ Adicionar tamanho</button>
+
+      <h3 class="sub">Adicionais do produto</h3>
+      <p class="fee-hint">Os extras que aparecem na ficha de todo produto. Deixe o preço em 0 para oferecer de graça.</p>
+      <div class="coupons" id="extraList"></div>
+      <button class="btn ghost small" id="addExtra" type="button">+ Adicionar adicional</button>
+
+      <h3 class="sub">Cupons de desconto</h3>
+      <div class="coupons" id="couponList"></div>
+      <button class="btn ghost small" id="addCoupon" type="button">+ Adicionar cupom</button>
+
+      <div class="save-bar">
+        <button class="btn solid" id="saveStore" type="button">Salvar loja</button>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ============ MODAL PRODUTO ============ -->
+<div class="modal" id="pModal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="pModalTitle">
+    <header class="modal-head">
+      <h2 id="pModalTitle">Produto</h2>
+      <button class="x" id="pCancelX" type="button" aria-label="Fechar">✕</button>
+    </header>
+
+    <div class="pm-photo">
+      <img id="pmImg" alt="">
+      <div class="pm-photo-actions">
+        <label class="btn ghost small">Trocar foto<input id="pmFile" type="file" accept="image/*" hidden></label>
+        <button class="btn ghost small" id="pmClearImg" type="button">Remover</button>
+        <span class="hint" id="pmUploading" hidden>enviando…</span>
+      </div>
+    </div>
+
+    <div class="fields">
+      <label class="field"><span>Nome</span><input id="pmName" type="text" maxlength="60"></label>
+      <div class="two">
+        <label class="field"><span>Categoria</span>
+          <select id="pmCat"></select>
+        </label>
+        <label class="field"><span>Preço (R$)</span><input id="pmPrice" type="number" min="0" step="0.1" inputmode="decimal"></label>
+      </div>
+      <div class="two">
+        <label class="field"><span>Estoque</span><input id="pmStock" type="number" min="0" step="1" inputmode="numeric" placeholder="ilimitado"></label>
+        <label class="field"><span>Etiqueta</span><input id="pmTag" type="text" maxlength="24" placeholder="Mais pedido"></label>
+      </div>
+      <div class="two">
+        <label class="field"><span>Tempo</span><input id="pmTime" type="text" maxlength="24" placeholder="25–35 min"></label>
+        <label class="field"><span>Kcal</span><input id="pmKcal" type="number" min="0" step="10" inputmode="numeric"></label>
+      </div>
+      <label class="field"><span>Descrição</span><textarea id="pmDesc" rows="3" maxlength="400"></textarea></label>
+      <div class="ex-pick">
+        <label class="check"><input id="pmSizesAll" type="checkbox"> <span>Mostrar todos os tamanhos da loja</span></label>
+        <div id="pmSizesPick" class="ex-list" hidden></div>
+      </div>
+      <div class="ex-pick">
+        <label class="check"><input id="pmExtrasAll" type="checkbox"> <span>Mostrar todos os adicionais da loja</span></label>
+        <div id="pmExtrasPick" class="ex-list" hidden></div>
+        <p class="fee-hint" style="margin:0">Desmarque para escolher só alguns adicionais (ou nenhum) na ficha deste produto.</p>
+      </div>
+      <label class="check"><input id="pmActive" type="checkbox"> <span>Disponível no cardápio</span></label>
+    </div>
+
+    <footer class="modal-foot">
+      <button class="btn danger ghost" id="pDelete" type="button">Excluir</button>
+      <span class="sp"></span>
+      <button class="btn ghost" id="pCancel" type="button">Cancelar</button>
+      <button class="btn solid" id="pSave" type="button">Salvar produto</button>
+    </footer>
+  </div>
+</div>
+
+<div class="toast-p" id="toastP" role="status" aria-live="polite"></div>
+
+<script src="/painel/painel.js?v=30"></script>
+</body>
+</html>

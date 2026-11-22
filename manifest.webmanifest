@@ -1,0 +1,23 @@
+{
+  "name": "Delícias do Aleff · Bolos",
+  "short_name": "Aleff Bolos",
+  "description": "Bolos caseiros, tortas e docinhos feitos no dia. Encomende pelo app.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FDF6EF",
+  "theme_color": "#FDF6EF",
+  "categories": ["food", "shopping", "lifestyle"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Cardápio", "short_name": "Cardápio", "url": "./#menu", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Carrinho", "short_name": "Carrinho", "url": "./#cart", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

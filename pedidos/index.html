@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Pedidos — Delícias do Aleff · Bolos</title>
+  <meta name="theme-color" content="#2B2118">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/pedidos/pedidos.css?v=2">
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div class="login" id="login">
+  <form class="login-card" id="loginForm" autocomplete="off">
+    <h1>Pedidos ao vivo</h1>
+    <p>Entre com o PIN da loja.</p>
+    <input id="pinInput" type="password" inputmode="numeric" placeholder="PIN" maxlength="12"
+           autocomplete="one-time-code" enterkeyhint="done" required>
+    <button class="btn solid" type="submit">Entrar</button>
+    <p class="err" id="loginErr" hidden>PIN incorreto. O padrão é 1234.</p>
+  </form>
+</div>
+
+<!-- ============ QUADRO ============ -->
+<div class="board" id="board" hidden>
+
+  <header class="top">
+    <div class="brand">
+      <span class="led" id="liveLed"></span>
+      <b>Pedidos</b>
+      <span class="count" id="pendingCount" hidden>0</span>
+    </div>
+    <div class="actions">
+      <button class="icon" id="soundBtn" type="button" aria-label="Ativar som" title="Som">🔔</button>
+      <button class="icon" id="fullBtn" type="button" aria-label="Tela cheia" title="Tela cheia">⛶</button>
+      <a class="icon" href="/painel/" aria-label="Abrir painel" title="Painel">⚙</a>
+    </div>
+  </header>
+
+  <nav class="chips" id="filters">
+    <button type="button" class="chip is-on" data-filter="live">Novos <i id="cLive">0</i></button>
+    <button type="button" class="chip" data-filter="doing">Em andamento <i id="cDoing">0</i></button>
+    <button type="button" class="chip" data-filter="done">Entregues <i id="cDone">0</i></button>
+    <button type="button" class="chip" data-filter="all">Todos</button>
+  </nav>
+
+  <main class="orders" id="ordersList" aria-live="polite"></main>
+
+  <div class="empty" id="emptyState" hidden>
+    <span>🧾</span>
+    <b>Nenhum pedido por aqui</b>
+    <small>Os pedidos do app aparecem nesta tela na hora.</small>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+</div>
+
+<script src="/pedidos/pedidos.js?v=2"></script>
+</body>
+</html>

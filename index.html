@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Delícias do Aleff · Bolos — Delivery</title>
+  <meta name="description" content="Bolos caseiros, tortas e docinhos feitos no dia, com entrega em Delícias do Aleff.">
+  <meta name="theme-color" content="#FDF6EF">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Aleff Bolos">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=25">
+</head>
+<body>
+
+<div class="app-shell" id="appShell">
+
+  <!-- ================= HOME ================= -->
+  <section class="screen is-active" id="screen-home" data-screen="home">
+    <div class="brand-row">
+      <img class="brand-logo" id="brandLogo" alt="" hidden>
+      <b id="brandName">Delícias do Aleff · Bolos</b>
+      <span class="brand-pill" id="brandPill">Aberto</span>
+    </div>
+    <header class="home-head">
+      <div class="loc">
+        <span class="loc-label">Entregar em</span>
+        <button class="loc-btn" id="locBtn" type="button">
+          <svg viewBox="0 0 24 24" class="ico"><path d="M12 21s-7-6.2-7-11a7 7 0 1 1 14 0c0 4.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.6"/></svg>
+          <span id="locLabel">Rua das Brasas, 128</span>
+        </button>
+      </div>
+      <button class="icon-btn" id="bellBtn" type="button" aria-label="Notificações">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
+        <i class="dot"></i>
+      </button>
+    </header>
+
+    <div class="home-greet">
+      <h1>Boa noite, <em>Aleff</em> 👋</h1>
+      <p>O que vai ser hoje?</p>
+    </div>
+
+    <div class="closed-bar" id="closedBar" hidden>😴 A loja está fechada agora — pedidos voltam no próximo horário.</div>
+
+    <div class="search-row">
+      <button class="search" id="searchBtn" type="button">
+        <svg viewBox="0 0 24 24" class="ico"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <span>Buscar bolo, torta, doce…</span>
+      </button>
+      <button class="filter-btn" type="button" data-goto="menu" aria-label="Filtrar cardápio">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+      </button>
+    </div>
+
+    <div class="promo-slider reveal" id="promoSlider" aria-label="Promoções">
+      <div class="promo-track" id="promoTrack"></div>
+      <div class="promo-dots" id="promoDots" hidden></div>
+    </div>
+
+    <div class="row-head">
+      <h3>Categorias</h3>
+      <button class="link" type="button" data-goto="menu">Ver tudo</button>
+    </div>
+    <nav class="cat-tiles" id="catTiles" aria-label="Categorias"></nav>
+
+    <div id="popularBlock">
+      <div class="row-head">
+        <h3 id="popularTitle">Mais pedidos</h3>
+        <button class="link" type="button" data-goto="menu">Ver tudo</button>
+      </div>
+      <div class="grid-2" id="popularList"></div>
+    </div>
+
+    <div id="homeCats"></div>
+
+    <div class="spacer"></div>
+  </section>
+
+  <!-- ================= MENU ================= -->
+  <section class="screen" id="screen-menu" data-screen="menu">
+    <header class="page-head">
+      <div>
+        <h1>Cardápio</h1>
+        <p>Bolos caseiros, feitos no dia.</p>
+      </div>
+      <button class="icon-btn" id="menuSearchBtn" type="button" aria-label="Buscar">
+        <svg viewBox="0 0 24 24" class="ico"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      </button>
+    </header>
+
+    <nav class="cats cats--static" id="menuChips" aria-label="Categorias do cardápio"></nav>
+
+    <div class="list" id="menuList"></div>
+    <div class="spacer"></div>
+  </section>
+
+  <!-- ================= CART ================= -->
+  <section class="screen" id="screen-cart" data-screen="cart">
+    <header class="page-head">
+      <div>
+        <h1>Carrinho</h1>
+        <p id="cartCountLabel">0 itens</p>
+      </div>
+      <button class="link danger" id="clearCartBtn" type="button">Limpar</button>
+    </header>
+
+    <div id="cartEmpty" class="empty">
+      <div class="empty-art">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M3 5h2l2.2 10.5a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.6L20.5 8H6"/><circle cx="10" cy="20" r="1.2"/><circle cx="17.5" cy="20" r="1.2"/></svg>
+      </div>
+      <h2>Seu carrinho está vazio</h2>
+      <p>Bateu a fome? O cardápio está logo ali.</p>
+      <button class="btn btn-solid" type="button" data-goto="menu">Ver o cardápio</button>
+    </div>
+
+    <div id="cartBody" hidden>
+      <div class="list" id="cartList"></div>
+
+      <div class="coupon">
+        <input id="couponInput" type="text" placeholder="Cupom de desconto" autocomplete="off" spellcheck="false">
+        <button class="btn btn-ghost" id="couponBtn" type="button">Aplicar</button>
+      </div>
+      <p class="coupon-hint">Dica: use <b>ALEFF10</b> e ganhe 10% off.</p>
+
+      <div class="summary">
+        <div class="srow"><span>Subtotal</span><b id="sumSub">R$ 0,00</b></div>
+        <div class="srow" id="sumDiscountRow" hidden><span>Desconto</span><b class="green" id="sumDiscount">−R$ 0,00</b></div>
+        <div class="srow"><span>Entrega</span><b id="sumFee">R$ 6,90</b></div>
+        <div class="srow total"><span>Total</span><b id="sumTotal">R$ 0,00</b></div>
+      </div>
+
+      <button class="btn btn-solid btn-block" id="goCheckout" type="button">Ir para o pagamento</button>
+      <div class="spacer"></div>
+    </div>
+  </section>
+
+  <!-- ================= PROFILE ================= -->
+  <section class="screen" id="screen-profile" data-screen="profile">
+    <header class="page-head">
+      <div>
+        <h1>Perfil</h1>
+        <p>Seus dados e pedidos</p>
+      </div>
+    </header>
+
+    <div class="profile-card">
+      <div class="avatar">A</div>
+      <div class="profile-info">
+        <h2>Aleff Souza</h2>
+        <p id="profileAddr">Rua das Brasas, 128 — Centro</p>
+      </div>
+      <button class="icon-btn small" id="editProfileBtn" type="button" aria-label="Editar perfil">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M4 20h4l10-10-4-4L4 16v4Z"/><path d="m13 6 4 4"/></svg>
+      </button>
+    </div>
+
+    <div class="stats">
+      <div><b id="statOrders">0</b><span>pedidos</span></div>
+      <div><b id="statFavs">0</b><span>favoritos</span></div>
+      <div><b>4,9</b><span>avaliação</span></div>
+    </div>
+
+    <div class="row-head"><h3>Favoritos</h3></div>
+    <div class="list" id="favList"></div>
+
+    <div class="row-head"><h3>Histórico</h3></div>
+    <div class="list" id="historyList"></div>
+
+    <div class="row-head"><h3>Ajustes</h3></div>
+    <div class="card-list">
+      <button class="setting" id="installBtn" type="button" hidden>
+        <span class="setting-ico">⤓</span>
+        <span class="setting-txt"><b>Instalar aplicativo</b><small>Atalho na tela inicial, abre offline</small></span>
+        <span class="chev">›</span>
+      </button>
+      <label class="setting">
+        <span class="setting-ico">🔔</span>
+        <span class="setting-txt"><b>Notificações</b><small>Avisos sobre o pedido</small></span>
+        <input type="checkbox" class="switch" id="notifToggle" checked>
+      </label>
+      <a class="setting" href="/painel" target="_blank" rel="noopener">
+        <span class="setting-ico">🔐</span>
+        <span class="setting-txt"><b>Painel da loja</b><small>Preços, fotos, estoque e pedidos</small></span>
+        <span class="chev">›</span>
+      </a>
+      <a class="setting" href="https://wa.me/5511999999999" target="_blank" rel="noopener">
+        <span class="setting-ico">💬</span>
+        <span class="setting-txt"><b>Falar com a loja</b><small>WhatsApp, seg a sáb das 9h às 19h</small></span>
+        <span class="chev">›</span>
+      </a>
+    </div>
+
+    <p class="version">Delícias do Aleff Delivery · v1.0.0</p>
+    <div class="spacer"></div>
+  </section>
+
+  <!-- ================= TRACKING ================= -->
+  <section class="screen" id="screen-track" data-screen="track">
+    <header class="page-head">
+      <div>
+        <h1>Pedido <span id="trackNum">#0000</span></h1>
+        <p id="trackEta">Previsão: 30–40 min</p>
+      </div>
+    </header>
+
+    <div class="track-hero">
+      <div class="track-pulse"><span></span></div>
+      <h2 id="trackStatus">Pedido recebido</h2>
+      <p>O forno já está aquecendo.</p>
+    </div>
+
+    <ol class="timeline" id="timeline">
+      <li class="done"><span class="tl-dot"></span><div><b>Pedido recebido</b><small>Confirmado às <span id="tlTime">—</span></small></div></li>
+      <li><span class="tl-dot"></span><div><b>No forno</b><small>Seu bolo está sendo preparado</small></div></li>
+      <li><span class="tl-dot"></span><div><b>A caminho</b><small>O entregador já saiu</small></div></li>
+      <li><span class="tl-dot"></span><div><b>Entregue</b><small>Bom apetite!</small></div></li>
+    </ol>
+
+    <div class="track-card" id="trackItems"></div>
+
+    <div class="track-total">
+      <span>Total pago</span><b id="trackTotal">R$ 0,00</b>
+    </div>
+
+    <button class="btn btn-line btn-block" id="receiptBtn" type="button">Ver recibo</button>
+    <button class="btn btn-ghost btn-block" id="repeatOrderBtn" type="button">Pedir de novo</button>
+    <button class="btn btn-ghost btn-block" type="button" data-goto="home">Voltar ao início</button>
+    <div class="spacer"></div>
+  </section>
+
+  <!-- ================= BOTTOM NAV ================= -->
+  <nav class="tabbar" id="tabbar" aria-label="Navegação do app">
+    <button class="tab is-active" data-tab="home" type="button">
+      <svg viewBox="0 0 24 24" class="ico"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1Z"/></svg>
+      <span>Início</span>
+    </button>
+    <button class="tab" data-tab="menu" type="button">
+      <svg viewBox="0 0 24 24" class="ico"><path d="M5 4h14M5 9h14M5 14h9M5 19h9"/></svg>
+      <span>Cardápio</span>
+    </button>
+    <button class="tab tab-cart" data-tab="cart" type="button">
+      <svg viewBox="0 0 24 24" class="ico"><path d="M3 5h2l2.2 10.5a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.6L20.5 8H6"/><circle cx="10" cy="20" r="1.2"/><circle cx="17.5" cy="20" r="1.2"/></svg>
+      <span>Carrinho</span>
+      <i class="badge" id="cartBadge" hidden>0</i>
+    </button>
+    <button class="tab" data-tab="profile" type="button">
+      <svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c.8-3.6 3.6-5.4 7-5.4s6.2 1.8 7 5.4"/></svg>
+      <span>Perfil</span>
+    </button>
+  </nav>
+
+  <!-- ================= SHEETS ================= -->
+  <div class="scrim" id="scrim" hidden></div>
+
+  <!-- produto -->
+  <div class="sheet" id="productSheet" role="dialog" aria-modal="true" aria-labelledby="psName" hidden>
+    <div class="sheet-grab"></div>
+    <button class="sheet-x" id="psClose" type="button" aria-label="Fechar">✕</button>
+    <div class="ps-photo"><img id="psImg" alt=""></div>
+    <div class="ps-body">
+      <div class="ps-head">
+        <h2 id="psName">—</h2>
+        <button class="fav-btn" id="psFav" type="button" aria-label="Favoritar">♡</button>
+      </div>
+      <div class="ps-meta">
+        <span class="rate">★ <b id="psRate">4.9</b></span>
+        <span class="sep"></span>
+        <span id="psTime">25–35 min</span>
+        <span class="sep"></span>
+        <span id="psKcal">540 kcal</span>
+      </div>
+      <p class="ps-desc" id="psDesc">—</p>
+
+      <h3 class="ps-label" id="psSizesLabel">Tamanho</h3>
+      <div class="opt-row" id="psSizes"></div>
+
+      <h3 class="ps-label" id="psExtrasLabel">Adicionais</h3>
+      <div class="opt-list" id="psExtras"></div>
+
+      <h3 class="ps-label">Alguma observação?</h3>
+      <textarea id="psNote" rows="2" placeholder="Ex.: escrever “Parabéns”, sem morango…"></textarea>
+
+      <div id="psSuggestBlock">
+        <h3 class="ps-label">Que tal levar também?</h3>
+        <div class="ps-suggest" id="psSuggest"></div>
+      </div>
+
+      <div class="ps-foot">
+        <div class="stepper" id="psStepper">
+          <button type="button" data-step="-1" aria-label="Diminuir">−</button>
+          <span id="psQty">1</span>
+          <button type="button" data-step="1" aria-label="Aumentar">+</button>
+        </div>
+        <button class="btn btn-solid ps-add" id="psAdd" type="button">Adicionar · R$ 0,00</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- busca -->
+  <div class="sheet sheet-search" id="searchSheet" role="dialog" aria-modal="true" hidden>
+    <div class="search-live">
+      <svg viewBox="0 0 24 24" class="ico"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="searchInput" type="search" placeholder="O que você quer hoje?" autocomplete="off">
+      <button class="sheet-x inline" id="searchClose" type="button" aria-label="Fechar">✕</button>
+    </div>
+    <div class="chips-suggest" id="searchSuggest"></div>
+    <div class="list" id="searchResults"></div>
+  </div>
+
+  <!-- checkout -->
+  <div class="sheet sheet-full" id="checkoutSheet" role="dialog" aria-modal="true" hidden>
+    <header class="sheet-head">
+      <button class="sheet-x inline" id="coClose" type="button" aria-label="Voltar">←</button>
+      <h2>Pagamento</h2>
+    </header>
+    <div class="co-body">
+      <h3 class="ps-label">Endereço de entrega</h3>
+      <button class="addr-card" id="addrCard" type="button">
+        <span class="addr-ico">📍</span>
+        <span class="addr-txt"><b id="coAddrTitle">Casa</b><small id="coAddrText">Rua das Brasas, 128 — Centro</small></span>
+        <span class="chev">›</span>
+      </button>
+
+      <h3 class="ps-label">Como pagar?</h3>
+      <div class="pay-list" id="payList">
+        <label class="pay"><input type="radio" name="pay" value="pix" checked><span class="pay-ico">⚡</span><span><b>Pix</b><small>Aprovação na hora</small></span><i class="radio"></i></label>
+        <label class="pay"><input type="radio" name="pay" value="card"><span class="pay-ico">💳</span><span><b>Cartão na entrega</b><small>Crédito ou débito</small></span><i class="radio"></i></label>
+        <label class="pay"><input type="radio" name="pay" value="cash"><span class="pay-ico">💵</span><span><b>Dinheiro</b><small><span id="cashNote">Troco para R$ 100,00</span></small></span><i class="radio"></i></label>
+      </div>
+
+      <h3 class="ps-label">Resumo</h3>
+      <div class="summary summary--flat" id="coSummary"></div>
+      <p class="af-error" id="coFeeNote" hidden></p>
+
+      <div class="eta-note">
+        <span>⏱</span>
+        <p>Previsão de entrega: <b>30–40 min</b><br><small>Forno a 180 °C — seu bolo só começa depois da confirmação.</small></p>
+      </div>
+
+      <button class="btn btn-solid btn-block" id="placeOrder" type="button">Confirmar pedido</button>
+      <div class="spacer"></div>
+    </div>
+  </div>
+
+  <!-- endereço por CEP -->
+  <div class="sheet" id="addrSheet" role="dialog" aria-modal="true" hidden>
+    <div class="sheet-grab"></div>
+    <header class="sheet-head">
+      <h2>Endereço de entrega</h2>
+      <button class="sheet-x" id="addrClose" type="button" aria-label="Fechar">×</button>
+    </header>
+    <div class="addr-form">
+      <div class="af-saved" id="afSaved" hidden>
+        <p class="af-saved-title">Endereços salvos</p>
+        <div class="af-saved-list" id="afSavedList"></div>
+        <button class="btn btn-ghost small af-new" id="afNew" type="button">+ Novo endereço</button>
+      </div>
+
+      <label class="af-label" for="afCep">CEP</label>
+      <div class="af-cep-row">
+        <input class="af-input" id="afCep" inputmode="numeric" autocomplete="postal-code" placeholder="00000-000" maxlength="9">
+        <button class="btn btn-line af-search" id="afCepBtn" type="button">Buscar</button>
+      </div>
+      <p class="cep-status" id="afCepStatus" aria-live="polite"></p>
+
+      <label class="af-label" for="afStreet">Rua</label>
+      <input class="af-input" id="afStreet" autocomplete="address-line1" placeholder="Rua / avenida">
+      <p class="af-fixed" id="afCity" hidden></p>
+
+      <div class="af-two">
+        <div>
+          <label class="af-label" for="afName">Nome de quem recebe</label>
+          <input class="af-input" id="afName" autocomplete="name" placeholder="Seu nome">
+        </div>
+        <div>
+          <label class="af-label" for="afNum">Número</label>
+          <input class="af-input" id="afNum" inputmode="numeric" placeholder="123">
+        </div>
+      </div>
+
+      <label class="af-label" for="afComp">Complemento <small>(opcional)</small></label>
+      <input class="af-input" id="afComp" placeholder="Apto, bloco, referência">
+
+      <label class="af-label" for="afPhone">WhatsApp <small>(opcional — para avisos da entrega)</small></label>
+      <input class="af-input" id="afPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999">
+
+      <div class="af-tags">
+        <button class="af-tag" type="button" data-title="Casa">🏠 Casa</button>
+        <button class="af-tag" type="button" data-title="Trabalho">💼 Trabalho</button>
+      </div>
+
+      <p class="af-error" id="afError" hidden></p>
+      <button class="btn btn-solid btn-block" id="afSave" type="button">Usar este endereço</button>
+      <div class="spacer"></div>
+    </div>
+  </div>
+
+  <!-- recibo -->
+  <div class="sheet sheet-full" id="receiptSheet" role="dialog" aria-modal="true" hidden>
+    <header class="sheet-head">
+      <button class="sheet-x inline" id="rcClose" type="button" aria-label="Voltar">←</button>
+      <h2>Recibo</h2>
+    </header>
+    <div class="rc-body" id="rcBody"></div>
+    <div class="rc-actions">
+      <button class="btn btn-solid btn-block" id="rcPrint" type="button">Imprimir / salvar PDF</button>
+    </div>
+  </div>
+
+  <!-- sucesso -->
+  <div class="sheet sheet-center" id="successSheet" role="dialog" aria-modal="true" hidden>
+    <div class="success-ico">✓</div>
+    <h2>Pedido confirmado!</h2>
+    <p>O número do seu pedido é <b id="successNum">#0000</b>.<br>Já mandamos para a confeitaria. 🎂</p>
+    <button class="btn btn-solid btn-block" id="successTrack" type="button">Acompanhar pedido</button>
+    <button class="btn btn-ghost btn-block" type="button" data-goto="home">Voltar ao início</button>
+  </div>
+
+  <div class="order-alert" id="orderAlert" role="alert" hidden>
+    <span class="oa-ico" id="oaIco">🛵</span>
+    <div class="oa-txt">
+      <b id="oaTitle">Saiu para entrega!</b>
+      <small id="oaBody">Seu pedido está a caminho.</small>
+    </div>
+    <button class="oa-btn" id="oaBtn" type="button">Acompanhar</button>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</div>
+
+<script src="app.js?v=33"></script>
+</body>
+</html>
