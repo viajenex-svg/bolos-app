@@ -5,6 +5,26 @@
 
   var PAY_TEXT = { pix: 'Pix', card: 'Cartão na entrega', cash: 'Dinheiro' };
   var ST_TEXT = ['', 'Pedido recebido', 'No forno', 'A caminho', 'Entregue'];
+
+  /* entregador de moto (boneco em SVG) no marcador do mapa */
+  var RIDER_SVG = '<svg viewBox="0 0 64 64" aria-hidden="true">' +
+    '<ellipse cx="32" cy="55" rx="21" ry="4" fill="#2b2118" opacity=".18"/>' +
+    '<circle cx="17" cy="46" r="8" fill="#2b2118"/><circle cx="17" cy="46" r="3" fill="#f6ece1"/>' +
+    '<circle cx="47" cy="46" r="8" fill="#2b2118"/><circle cx="47" cy="46" r="3" fill="#f6ece1"/>' +
+    '<path d="M13 40c0-5 4-8 9-8h9l4 8z" fill="#f4761d"/>' +
+    '<rect x="30" y="36" width="13" height="5" rx="2.5" fill="#3a2e24"/>' +
+    '<path d="M40 41l6-16" stroke="#f4761d" stroke-width="7" stroke-linecap="round"/>' +
+    '<path d="M44 25h6" stroke="#2b2118" stroke-width="3.5" stroke-linecap="round"/>' +
+    '<rect x="15" y="29" width="15" height="6" rx="3" fill="#2b2118"/>' +
+    '<rect x="12" y="15" width="14" height="15" rx="3" fill="#e2574c"/>' +
+    '<rect x="12" y="15" width="14" height="5" rx="2.5" fill="#f4761d"/>' +
+    '<path d="M30 30l4 6 5 3" stroke="#3c5a78" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<path d="M30 31l5-14" stroke="#f4761d" stroke-width="9" stroke-linecap="round"/>' +
+    '<path d="M35 18l9 8" stroke="#f4761d" stroke-width="6" stroke-linecap="round"/>' +
+    '<circle cx="45" cy="26" r="2.6" fill="#8d5a3b"/>' +
+    '<circle cx="36" cy="12" r="6.5" fill="#2b2118"/>' +
+    '<path d="M35 8.5h4a3.5 3.5 0 0 1 0 7h-4z" fill="#cfe6f2"/>' +
+    '</svg>';
   var SEND_MS = 10000;   /* no máximo um envio a cada 10 s... */
   var SEND_M = 25;       /* ...ou quando andar mais de 25 m. */
   var POLL_MS = 30000;
@@ -324,8 +344,8 @@
     var ll = [f.lat, f.lon];
     if (!S.layers.me) {
       S.layers.me = L.marker(ll, {
-        icon: L.divIcon({ className: 'tl-scooter', html: '<span>🛵</span>',
-                          iconSize: [34, 34], iconAnchor: [17, 17] }),
+        icon: L.divIcon({ className: 'tl-scooter', html: '<span>' + RIDER_SVG + '</span>',
+                          iconSize: [44, 44], iconAnchor: [22, 22] }),
         zIndexOffset: 600
       }).addTo(m);
     } else {
