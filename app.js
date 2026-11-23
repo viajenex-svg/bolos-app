@@ -1480,6 +1480,7 @@
     }).join('') + '<div class="tline"><span>Entrega</span><b>' + esc(order.addr) + '</b></div>';
 
     setStatus(order.status || 1);
+    startOrderPoll(num);   /* confere o status na hora ao abrir o acompanhamento */
 
     $('#receiptBtn').onclick = function () { openReceipt(order); };
 
@@ -1704,7 +1705,11 @@
     fetch('api/order/' + encodeURIComponent(order.num) + '/track?t=' + encodeURIComponent(order.token),
       { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) { if (d && d.ok) renderTrackData(d); })
+      .then(function (d) {
+        if (!d || !d.ok) return;
+        applyServerStatus(order.num, d.status);   /* status também anda com o mapa */
+        renderTrackData(d);
+      })
       .catch(function () { mapNote('Sem conexão — o mapa tenta de novo em instantes.'); });
   }
 
@@ -1839,9 +1844,13 @@
     return null;
   }
 
+  var ORDER_POLL_MS = 8000;
+  var orderPollGen = {};   /* invalida cadeias antigas quando o poll é reiniciado */
+
   function stopOrderPoll(num) {
+    orderPollGen[num] = (orderPollGen[num] || 0) + 1;
     if (orderPolls[num]) {
-      clearInterval(orderPolls[num]);
+      clearTimeout(orderPolls[num]);
       delete orderPolls[num];
     }
   }
@@ -1896,33 +1905,53 @@
     if (alertNum) showTrack(alertNum);
   });
 
+  /* aplica um status vindo do servidor sem nunca voltar atrás */
+  function applyServerStatus(num, raw) {
+    var o = orderByNum(num);
+    if (!o) return;
+    var st = Math.min(4, Math.max(1, Number(raw) || 1));
+    var prev = Number(o.status) || 1;
+    if (st <= prev) return;
+    o.status = st;
+    save();
+    if (current === 'track' && $('#trackNum').textContent === '#' + num) setStatus(st);
+    announceStatus(num, st);
+    if (st >= 4) stopOrderPoll(num);
+  }
+
   function startOrderPoll(num) {
     stopOrderPoll(num);
     var order = orderByNum(num);
     if (!order || !order.token) return;   /* pedido feito offline: sem acompanhamento */
 
+    var gen = orderPollGen[num];
+
+    function alive() { return orderPollGen[num] === gen; }
+
+    function next() {
+      if (!alive()) return;
+      var cur = orderByNum(num);
+      if (!cur || (Number(cur.status) || 1) >= 4) return;
+      orderPolls[num] = setTimeout(tick, ORDER_POLL_MS);
+    }
+
     function tick() {
+      if (!alive()) return;
+      delete orderPolls[num];
       var o = orderByNum(num);
-      if (!o) { stopOrderPoll(num); return; }
-      if ((Number(o.status) || 1) >= 4) { stopOrderPoll(num); return; }
+      if (!o) return;
+      if ((Number(o.status) || 1) >= 4) return;
       fetch('api/order/' + encodeURIComponent(num) + '?t=' + encodeURIComponent(o.token), { cache: 'no-store' })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (d) {
-          if (!d || !d.order) return;
-          var st = Math.min(4, Math.max(1, Number(d.order.status) || 1));
-          var prev = Number(o.status) || 1;
-          if (st <= prev) return;
-          o.status = st;
-          save();
-          if (current === 'track' && $('#trackNum').textContent === '#' + num) setStatus(st);
-          announceStatus(num, st);
-          if (st >= 4) stopOrderPoll(num);
+          if (!alive()) return;
+          if (d && d.order) applyServerStatus(num, d.order.status);
+          next();
         })
-        .catch(function () { /* app offline: tenta de novo no próximo ciclo */ });
+        .catch(next); /* app offline: tenta de novo no próximo ciclo */
     }
 
     tick();
-    orderPolls[num] = setInterval(tick, 20000);
   }
 
   function resumeOrderPolls() {
@@ -2368,5 +2397,11 @@
     resumeOrderPolls();
     if (current === 'track') syncTrackView();
   });
-  window.addEventListener('focus', softRefresh);
+  window.addEventListener('focus', function () {
+    softRefresh();
+    resumeOrderPolls();
+  });
+  /* voltou do cache de navegação (bfcache) ou a internet voltou */
+  window.addEventListener('pageshow', function () { resumeOrderPolls(); });
+  window.addEventListener('online', function () { resumeOrderPolls(); });
 })();
