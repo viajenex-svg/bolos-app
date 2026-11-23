@@ -70,6 +70,32 @@
     });
   }
 
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (resolve, reject) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (err) {}
+      document.body.removeChild(ta);
+      if (ok) resolve();
+      else reject(new Error('não consegui copiar'));
+    });
+  }
+
+  function fmtPhone(d) {
+    if (d.length === 11) return '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7);
+    if (d.length === 10) return '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6);
+    return d;
+  }
+
   // ---------------------------------------------------------------- som
 
   function unlockAudio() {
@@ -239,9 +265,16 @@
     var when = o.createdAt
       ? new Date(Number(o.createdAt) * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
       : (o.time || '—');
+    var tel = String(o.phone || '').replace(/\D/g, '');
+    var mbHref = o.mtoken
+      ? location.origin + '/motoboy/?o=' + encodeURIComponent(o.num) + '&t=' + encodeURIComponent(o.mtoken)
+      : '';
     return '<article class="order st' + st + '" data-num="' + esc(o.num) + '">' +
       '<div class="oh"><span class="num">#' + esc(o.num) + '</span>' +
       '<span class="meta"><b>' + STATUS[st - 1] + '</b><small>' + when + ' · ' + ago(o.createdAt) + '</small></span></div>' +
+      '<div class="cust">👤 <b>' + esc(o.name || 'Cliente') + '</b>' +
+      (tel ? '<a href="tel:' + esc(tel) + '">📞 ' + esc(fmtPhone(tel)) + '</a>' : '') +
+      '</div>' +
       '<ul class="items">' + (o.items || []).map(itemHTML).join('') + '</ul>' +
       '<div class="meta-row">' +
       '<span>📍 <b>' + esc(o.addr || '—') + '</b></span>' +
@@ -249,6 +282,11 @@
       '</div>' +
       '<div class="total-row"><span class="lbl">Total</span><span class="val">' + money(o.total) + '</span></div>' +
       stepsHTML(o) +
+      '<div class="mb-line">' +
+      (mbHref ? '<a class="mb-link" href="' + esc(mbHref) + '" target="_blank" rel="noopener">🛵 Link do motoboy</a>' +
+        '<button type="button" class="mb-copy" data-copy="' + esc(mbHref) + '">Copiar link</button>' : '') +
+      '<button type="button" class="order-del" data-odel aria-label="Apagar pedido">🗑 Apagar</button>' +
+      '</div>' +
       '</article>';
   }
 
@@ -292,6 +330,34 @@
   });
 
   $('#ordersList').addEventListener('click', function (e) {
+    var copyBtn = e.target.closest('[data-copy]');
+    if (copyBtn) {
+      copyText(copyBtn.getAttribute('data-copy'))
+        .then(function () { toast('Link do motoboy copiado'); })
+        .catch(function (err) { toast(err.message); });
+      return;
+    }
+
+    var delBtn = e.target.closest('[data-odel]');
+    if (delBtn) {
+      var dcard = delBtn.closest('.order');
+      var dnum = dcard.getAttribute('data-num');
+      if (!confirm('Apagar o pedido #' + dnum + '?\n\nEle sai do quadro, do painel e do histórico. Não dá para desfazer.')) return;
+      delBtn.disabled = true;
+      api('/api/admin/orders/' + encodeURIComponent(dnum), { method: 'DELETE' })
+        .then(function () {
+          orders = orders.filter(function (o) { return String(o.num) !== String(dnum); });
+          delete seen[dnum];
+          render();
+          toast('Pedido #' + dnum + ' apagado');
+        })
+        .catch(function (err) {
+          delBtn.disabled = false;
+          toast('Não deu: ' + err.message);
+        });
+      return;
+    }
+
     var b = e.target.closest('.step');
     if (!b || b.disabled) return;
     var num = b.getAttribute('data-num');

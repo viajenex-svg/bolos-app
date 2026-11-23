@@ -195,6 +195,24 @@ button { cursor: pointer; }
 .oh .meta b { display: block; font-size: 11.5px; color: var(--gold); font-weight: 700; }
 .oh .meta small { color: var(--muted); font-size: 11.5px; }
 
+.cust {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  background: var(--bg-2);
+  border-radius: 11px;
+  padding: 9px 11px;
+  font-size: 13.5px;
+}
+.cust b { font-weight: 700; }
+.cust a {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+  margin-left: auto;
+}
+
 .items { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 7px; }
 .item { border-top: 1px dashed var(--line); padding-top: 7px; }
 .item:first-child { border-top: 0; padding-top: 0; }
@@ -240,6 +258,31 @@ button { cursor: pointer; }
   box-shadow: 0 10px 24px -12px rgba(244,118,29,.9);
 }
 .step:disabled { opacity: .45; cursor: default; }
+
+.mb-line { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.mb-link,
+.mb-copy,
+.order-del {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 11px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.mb-link { background: var(--card-2); border: 1px solid var(--line); color: var(--ink); }
+.mb-copy { background: var(--card-2); border: 1px solid var(--line); color: var(--muted); }
+.mb-copy:hover { color: var(--ink); }
+.order-del {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid #6b332a;
+  color: #ff8f73;
+}
+.order-del:hover { background: rgba(255,143,115,.08); }
+.order-del:disabled { opacity: .5; cursor: default; }
 
 /* ---------------- estados ---------------- */
 
