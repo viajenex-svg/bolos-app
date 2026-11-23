@@ -1604,6 +1604,22 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if not self._need_auth():
             return
+
+        m = re.match(r'^/api/admin/orders/([\w-]+)$', path)
+        if m:
+            num = m.group(1)
+            data = load()
+            before = len(data.get('orders', []))
+            data['orders'] = [o for o in data.get('orders', []) if str(o.get('num')) != num]
+            if len(data['orders']) == before:
+                return self._err(404, 'pedido não encontrado')
+            save(data)
+            # apaga também o rastreio (posição do motoboy, rota em cache)
+            track = _track_all()
+            track.get('orders', {}).pop(num, None)
+            _track_save(track, data)
+            return self._json({'ok': True})
+
         m = re.match(r'^/api/admin/products/([\w-]+)$', path)
         if not m:
             return self._err(404, 'rota não encontrada')

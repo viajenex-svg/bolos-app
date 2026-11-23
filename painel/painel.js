@@ -331,7 +331,9 @@
           '<a class="mb-link" href="' + esc(mbHref) + '" target="_blank" rel="noopener">🛵 Link do motoboy</a>' +
           '<button type="button" class="mb-copy" data-copy="' + esc(mbHref) + '">Copiar link</button>' +
           '</div>' : '') +
-        '<div class="status-btns">' + btns + '</div>' +
+        '<div class="status-btns">' + btns +
+          '<button type="button" class="order-del" data-odel aria-label="Apagar pedido">🗑 Apagar</button>' +
+        '</div>' +
         '</article>';
     }).join('');
   }
@@ -1383,6 +1385,25 @@
       copyText(copyBtn.dataset.copy)
         .then(function () { toast('Link do motoboy copiado'); })
         .catch(function (err) { toast(err.message); });
+      return;
+    }
+
+    var delBtn = e.target.closest('[data-odel]');
+    if (delBtn) {
+      var dcard = delBtn.closest('.order');
+      var dnum = dcard.dataset.num;
+      if (!confirm('Apagar o pedido #' + dnum + '?\n\nEle sai do painel e do histórico. Não dá para desfazer.')) return;
+      delBtn.disabled = true;
+      api('/api/admin/orders/' + encodeURIComponent(dnum), { method: 'DELETE' })
+        .then(function () {
+          state.orders = state.orders.filter(function (o) { return String(o.num) !== String(dnum); });
+          renderOrders();
+          toast('Pedido #' + dnum + ' apagado');
+        })
+        .catch(function (err) {
+          delBtn.disabled = false;
+          toast(err.message);
+        });
       return;
     }
 
