@@ -300,6 +300,16 @@
   /* ---------------- telas ---------------- */
 
   var current = 'home';
+  var NAV_KEY = 'sc-bolos-nav';
+
+  /* lembra a tela atual para um recarregamento não jogar o cliente de volta na home */
+  function saveNav() {
+    try {
+      var nav = { screen: current };
+      if (current === 'track' && tmapNum) nav.num = tmapNum;
+      sessionStorage.setItem(NAV_KEY, JSON.stringify(nav));
+    } catch (e) { /* navegador sem sessionStorage */ }
+  }
 
   function go(name, opts) {
     var target = $('#screen-' + name);
@@ -307,6 +317,7 @@
     $$('.screen').forEach(function (s) { s.classList.remove('is-active'); });
     target.classList.add('is-active');
     current = name;
+    saveNav();
     $$('.tab').forEach(function (t) {
       t.classList.toggle('is-active', t.getAttribute('data-tab') === name);
     });
@@ -2385,6 +2396,18 @@
   renderCart();
   resumeOrderPolls();
   refreshMenu();
+
+  /* recarregou a página: volta para a tela em que o cliente estava */
+  (function restoreNav() {
+    var nav = null;
+    try { nav = JSON.parse(sessionStorage.getItem(NAV_KEY) || 'null'); } catch (e) {}
+    if (!nav || !nav.screen || nav.screen === 'home') return;
+    if (nav.screen === 'track') {
+      if (nav.num && orderByNum(nav.num)) showTrack(nav.num);
+      return;
+    }
+    if ($('#screen-' + nav.screen)) go(nav.screen);
+  })();
 
   if (!customerName()) setTimeout(function () { openWelcome(true); }, 450);
 
