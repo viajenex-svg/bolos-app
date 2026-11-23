@@ -4,7 +4,7 @@
   'use strict';
 
   var PAY_TEXT = { pix: 'Pix', card: 'Cartão na entrega', cash: 'Dinheiro' };
-  var ST_TEXT = ['', 'Pedido recebido', 'Na chapa', 'A caminho', 'Entregue'];
+  var ST_TEXT = ['', 'Pedido recebido', 'No forno', 'A caminho', 'Entregue'];
   var SEND_MS = 10000;   /* no máximo um envio a cada 10 s... */
   var SEND_M = 25;       /* ...ou quando andar mais de 25 m. */
   var POLL_MS = 30000;
@@ -126,6 +126,31 @@
     }
   }
 
+  function renderNav(d) {
+    var o = (d && d.order) || S.order || {};
+    var dest = (d && d.dest) || null;
+    var coords = d && d.route && d.route.coords;
+    if (!dest && coords && coords.length > 1) {
+      var last = coords[coords.length - 1];
+      dest = { lat: last[0], lon: last[1] };
+    }
+    var addr = o.addr || '';
+    var row = $('navRow');
+    if (!dest && !addr) { row.hidden = true; return; }
+    row.hidden = false;
+    if (dest) {
+      var ll = Number(dest.lat).toFixed(6) + ',' + Number(dest.lon).toFixed(6);
+      $('wazeBtn').href = 'https://waze.com/ul?ll=' + ll + '&navigate=yes';
+      $('mapsBtn').href = 'https://www.google.com/maps/dir/?api=1&destination=' +
+        ll + '&travelmode=driving';
+    } else {
+      var q = encodeURIComponent(addr);
+      $('wazeBtn').href = 'https://waze.com/ul?q=' + q + '&navigate=yes';
+      $('mapsBtn').href = 'https://www.google.com/maps/dir/?api=1&destination=' +
+        q + '&travelmode=driving';
+    }
+  }
+
   function renderStatus(st) {
     var pill = $('statusPill');
     pill.className = 'pill' + (st === 3 ? ' s3' : st === 4 ? ' s4' : '');
@@ -195,6 +220,7 @@
     $('orderNum').hidden = false;
     $('orderNum').textContent = '#' + o.num;
     renderOrder(o);
+    renderNav(d);
     renderStatus(st);
 
     if (st >= 4) { finishUI(); return; }
@@ -502,6 +528,7 @@
         var st = Number(r.data.status) || 0;
         if (r.data.order) S.order = r.data.order;
         if (st >= 4 && S.status !== 4) { finishUI(); return; }
+        renderNav(r.data);
         renderMap(r.data);
       })
       .catch(function () {});
