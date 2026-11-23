@@ -1,7 +1,7 @@
 /* Delícias do Aleff · Bolos — service worker
    pré-cache do app shell, cache-first com atualização em segundo plano */
 
-var CACHE = 'sc-bolos-v19';
+var CACHE = 'sc-bolos-v20';
 
 var SHELL = [
   './',

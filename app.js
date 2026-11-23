@@ -1731,12 +1731,29 @@
     return Math.round(sec / 60) + ' min';
   }
 
+  function fitTrackPoints(map, pts) {
+    var b = L.latLngBounds(pts);
+    var sw = b.getSouthWest(), ne = b.getNorthEast();
+    var tiny = Math.abs(ne.lat - sw.lat) < 0.0006 && Math.abs(ne.lng - sw.lng) < 0.0006;
+    if (tiny) map.setView(b.getCenter(), 16, { animate: false });
+    else map.fitBounds(b.pad(0.2), { animate: false, maxZoom: 16 });
+    tmapFitted = true;
+  }
+
+  function sameSpot(a, b) {
+    return a && b && Math.abs(a.lat - b.lat) < 0.0006 && Math.abs(a.lon - b.lon) < 0.0006;
+  }
+
   function renderTrackData(d) {
     var map = ensureTrackMap();
     if (!map || d.status !== 3) return;
 
     var origin = d.origin, dest = d.dest, route = d.route;
     var coords = route && route.coords && route.coords.length > 1 ? route.coords : null;
+    var near = sameSpot(origin, dest);   /* loja e endereço praticamente no mesmo ponto */
+    if (near || (route && Number(route.distanceM) > 0 && Number(route.distanceM) < 60)) {
+      coords = null;
+    }
 
     if (origin) {
       if (!tmapLayers.origin) tmapLayers.origin = L.circleMarker([origin.lat, origin.lon], {
@@ -1760,7 +1777,7 @@
       }
       tmapLayers.done.setLatLngs(coords.slice(0, idx + 1));
       tmapLayers.left.setLatLngs(coords.slice(idx));
-    } else if (origin && dest) {
+    } else if (origin && dest && !near) {
       if (tmapLayers.done) { map.removeLayer(tmapLayers.done); tmapLayers.done = null; }
       if (tmapLayers.left) { map.removeLayer(tmapLayers.left); tmapLayers.left = null; }
       if (!tmapLayers.fallback) tmapLayers.fallback = L.polyline(
@@ -1768,20 +1785,25 @@
         { color: '#e8622c', weight: 4, dashArray: '8 8', opacity: 0.8 }
       ).addTo(map);
       mapNote('Rota aproximada: linha reta entre a loja e você.');
+    } else if (near) {
+      if (tmapLayers.done) { map.removeLayer(tmapLayers.done); tmapLayers.done = null; }
+      if (tmapLayers.left) { map.removeLayer(tmapLayers.left); tmapLayers.left = null; }
+      if (tmapLayers.fallback) { map.removeLayer(tmapLayers.fallback); tmapLayers.fallback = null; }
+      mapNote('A loja e o endereço ficam praticamente no mesmo ponto — acompanhe o motoboy no mapa.');
     } else {
       mapNote('Calculando a rota…');
     }
 
     if (!tmapFitted) {
-      var pts = coords ? coords.slice() : [];
-      if (!pts.length) {
+      var pts = [];
+      if (coords) pts = pts.concat(coords);
+      else {
         if (origin) pts.push([origin.lat, origin.lon]);
         if (dest) pts.push([dest.lat, dest.lon]);
       }
-      if (pts.length) {
-        map.fitBounds(L.latLngBounds(pts).pad(0.2), { animate: false });
-        tmapFitted = true;
-      }
+      var c0 = d.courier;
+      if (c0 && c0.lat != null && c0.lon != null) pts.push([c0.lat, c0.lon]);
+      if (pts.length) fitTrackPoints(map, pts);
     }
 
     var c = d.courier;

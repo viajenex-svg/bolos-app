@@ -298,6 +298,11 @@
     }
 
     var coords = d.route && d.route.coords && d.route.coords.length > 1 ? d.route.coords : null;
+    var near = d.origin && d.dest &&
+      Math.abs(d.origin.lat - d.dest.lat) < 0.0006 && Math.abs(d.origin.lon - d.dest.lon) < 0.0006;
+    if (coords && (near || (Number(d.route.distanceM) > 0 && Number(d.route.distanceM) < 60))) {
+      coords = null;
+    }
     if (coords) {
       if (S.layers.fallback) { m.removeLayer(S.layers.fallback); S.layers.fallback = null; }
       if (!S.layers.left) {
@@ -310,7 +315,7 @@
       var min = Math.round((Number(d.route.durationS) || 0) / 60);
       $('mapLine').textContent = 'Rota: ' + km.toFixed(1).replace('.', ',') + ' km · ~' +
         Math.max(1, min) + ' min — cinza já feito, laranja o que falta';
-    } else if (d.origin && d.dest) {
+    } else if (d.origin && d.dest && !near) {
       if (S.layers.left) { m.removeLayer(S.layers.left); S.layers.left = null; }
       if (S.layers.done) { m.removeLayer(S.layers.done); S.layers.done = null; }
       if (!S.layers.fallback) {
@@ -320,6 +325,11 @@
         ).addTo(m);
       }
       $('mapLine').textContent = 'Sem rota traçada — linha reta da loja até o cliente.';
+    } else if (near) {
+      if (S.layers.left) { m.removeLayer(S.layers.left); S.layers.left = null; }
+      if (S.layers.done) { m.removeLayer(S.layers.done); S.layers.done = null; }
+      if (S.layers.fallback) { m.removeLayer(S.layers.fallback); S.layers.fallback = null; }
+      $('mapLine').textContent = 'Loja e endereço no mesmo ponto — siga o endereço acima.';
     } else {
       $('mapLine').textContent = 'Calculando a rota…';
     }
@@ -331,8 +341,17 @@
         if (d.origin) pts.push([d.origin.lat, d.origin.lon]);
         if (d.dest) pts.push([d.dest.lat, d.dest.lon]);
       }
+      var me = (d.courier && d.courier.lat != null) ? [d.courier.lat, d.courier.lon] : null;
+      if (!me && S.lastFix && S.lastFix.lat != null) me = [S.lastFix.lat, S.lastFix.lon];
+      if (me) pts.push(me);
       if (pts.length) {
-        m.fitBounds(L.latLngBounds(pts).pad(0.2), { animate: false });
+        var b = L.latLngBounds(pts);
+        var sw = b.getSouthWest(), ne = b.getNorthEast();
+        if (Math.abs(ne.lat - sw.lat) < 0.0006 && Math.abs(ne.lng - sw.lng) < 0.0006) {
+          m.setView(b.getCenter(), 16, { animate: false });
+        } else {
+          m.fitBounds(b.pad(0.2), { animate: false, maxZoom: 16 });
+        }
         S.fitted = true;
       }
     }
