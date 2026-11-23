@@ -317,6 +317,8 @@
     if (name === 'profile') renderProfile();
     if (name === 'menu') renderMenu();
     if (name === 'home') renderHome();
+    if (name === 'track') syncTrackView();
+    else stopTrackMap();
     buzz();
   }
 
@@ -1453,6 +1455,10 @@
   function clearTrackTimers() {
     trackTimers.forEach(clearTimeout);
     trackTimers = [];
+    if (tmapAnim) {
+      cancelAnimationFrame(tmapAnim);
+      tmapAnim = null;
+    }
   }
 
   function showTrack(num) {
@@ -1460,6 +1466,9 @@
     var order = null;
     for (var i = 0; i < store.orders.length; i++) if (store.orders[i].num === num) order = store.orders[i];
     if (!order) return;
+
+    if (tmapNum !== num) resetTrackMapLayers();
+    tmapNum = num;
 
     go('track');
 
@@ -1583,6 +1592,195 @@
     if (step === 4) {
       $('#trackEta').textContent = 'Entregue — bom apetite!';
       $$('.track-pulse span')[0].style.background = 'var(--green)';
+    }
+    syncTrackView();
+  }
+
+  /* ---------------- mapa ao vivo do motoboy ---------------- */
+
+  var tmap = null;                  /* instância Leaflet */
+  var tmapLayers = {};
+  var tmapTimer = null;
+  var tmapNum = null;
+  var tmapFitted = false;
+  var tmapAnim = null;
+  var tmapLast = null;              /* última posição animada [lat,lon] */
+  var TMAP_MS = 7000;
+
+  function mapNote(msg) {
+    var n = $('#trackMapNote');
+    if (!n) return;
+    n.hidden = !msg;
+    n.textContent = msg || '';
+  }
+
+  function ensureTrackMap() {
+    if (tmap) return tmap;
+    if (typeof L === 'undefined') return null;
+    var box = $('#trackMap');
+    if (!box) return null;
+    tmap = L.map(box, { zoomControl: false });
+    tmap.setView([-8.05, -34.88], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(tmap);
+    return tmap;
+  }
+
+  function resetTrackMapLayers() {
+    if (tmap) {
+      Object.keys(tmapLayers).forEach(function (k) {
+        if (tmapLayers[k]) tmap.removeLayer(tmapLayers[k]);
+      });
+    }
+    tmapLayers = {};
+    tmapLast = null;
+    tmapFitted = false;
+    mapNote('');
+  }
+
+  function stopTrackMap() {
+    if (tmapTimer) { clearInterval(tmapTimer); tmapTimer = null; }
+    if (tmapAnim) { cancelAnimationFrame(tmapAnim); tmapAnim = null; }
+    tmapNum = null;
+  }
+
+  function syncTrackView() {
+    var order = tmapNum ? orderByNum(tmapNum) : null;
+    var step = order ? (Number(order.status) || 1) : 1;
+    var onTick = current === 'track' && !document.hidden;
+
+    if (step < 3 || step >= 4) {
+      if (tmapTimer) { clearInterval(tmapTimer); tmapTimer = null; }
+      $('#trackMapWrap').hidden = true;
+      $('#trackMapHint').hidden = step >= 4;
+      if (step < 3) $('#trackMapHint').textContent = 'O mapa ao vivo aparece quando o pedido sair para entrega.';
+      return;
+    }
+    if (!onTick) {
+      if (tmapTimer) { clearInterval(tmapTimer); tmapTimer = null; }
+      return;
+    }
+
+    $('#trackMapHint').hidden = true;
+    $('#trackMapWrap').hidden = false;
+    if (typeof L === 'undefined') {
+      $('#trackMapWrap').hidden = true;
+      $('#trackMapHint').hidden = false;
+      $('#trackMapHint').textContent = 'Mapa indisponível neste aparelho.';
+      return;
+    }
+    if (!ensureTrackMap()) return;
+    setTimeout(function () { if (tmap) tmap.invalidateSize(); }, 60);
+    trackMapTick();
+    if (!tmapTimer) tmapTimer = setInterval(trackMapTick, TMAP_MS);
+  }
+
+  function trackMapTick() {
+    var order = tmapNum ? orderByNum(tmapNum) : null;
+    if (!order || !order.token) { stopTrackMap(); return; }
+    if (current !== 'track' || document.hidden || (Number(order.status) || 1) !== 3) return;
+    fetch('api/order/' + encodeURIComponent(order.num) + '/track?t=' + encodeURIComponent(order.token),
+      { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && d.ok) renderTrackData(d); })
+      .catch(function () { mapNote('Sem conexão — o mapa tenta de novo em instantes.'); });
+  }
+
+  function animateTo(marker, target) {
+    var from = tmapLast || target;
+    tmapLast = target;
+    if (tmapAnim) { cancelAnimationFrame(tmapAnim); tmapAnim = null; }
+    if (from[0] === target[0] && from[1] === target[1]) return;
+    var t0 = 0;
+    function step(ts) {
+      if (!t0) t0 = ts;
+      var p = Math.min(1, (ts - t0) / 1200);
+      var ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+      marker.setLatLng([from[0] + (target[0] - from[0]) * ease,
+                        from[1] + (target[1] - from[1]) * ease]);
+      tmapAnim = p < 1 ? requestAnimationFrame(step) : null;
+    }
+    tmapAnim = requestAnimationFrame(step);
+  }
+
+  function fmtAge(sec) {
+    sec = Math.max(0, Math.round(sec));
+    if (sec < 60) return sec + ' s';
+    return Math.round(sec / 60) + ' min';
+  }
+
+  function renderTrackData(d) {
+    var map = ensureTrackMap();
+    if (!map || d.status !== 3) return;
+
+    var origin = d.origin, dest = d.dest, route = d.route;
+    var coords = route && route.coords && route.coords.length > 1 ? route.coords : null;
+
+    if (origin) {
+      if (!tmapLayers.origin) tmapLayers.origin = L.circleMarker([origin.lat, origin.lon], {
+        radius: 6, color: '#2b2118', weight: 2, fillColor: '#2b2118', fillOpacity: 1
+      }).addTo(map).bindPopup('Loja');
+      else tmapLayers.origin.setLatLng([origin.lat, origin.lon]);
+    }
+    if (dest) {
+      if (!tmapLayers.dest) tmapLayers.dest = L.circleMarker([dest.lat, dest.lon], {
+        radius: 8, color: '#1f9d55', weight: 3, fillColor: '#1f9d55', fillOpacity: 1
+      }).addTo(map).bindPopup('Seu endereço');
+      else tmapLayers.dest.setLatLng([dest.lat, dest.lon]);
+    }
+
+    if (coords) {
+      var idx = Math.max(0, Math.min(Number(route.idx) || 0, coords.length - 1));
+      if (tmapLayers.fallback) { map.removeLayer(tmapLayers.fallback); tmapLayers.fallback = null; }
+      if (!tmapLayers.done) {
+        tmapLayers.done = L.polyline([], { color: '#9a8f86', weight: 5, opacity: 0.95 }).addTo(map);
+        tmapLayers.left = L.polyline([], { color: '#e8622c', weight: 5, opacity: 0.95 }).addTo(map);
+      }
+      tmapLayers.done.setLatLngs(coords.slice(0, idx + 1));
+      tmapLayers.left.setLatLngs(coords.slice(idx));
+    } else if (origin && dest) {
+      if (tmapLayers.done) { map.removeLayer(tmapLayers.done); tmapLayers.done = null; }
+      if (tmapLayers.left) { map.removeLayer(tmapLayers.left); tmapLayers.left = null; }
+      if (!tmapLayers.fallback) tmapLayers.fallback = L.polyline(
+        [[origin.lat, origin.lon], [dest.lat, dest.lon]],
+        { color: '#e8622c', weight: 4, dashArray: '8 8', opacity: 0.8 }
+      ).addTo(map);
+      mapNote('Rota aproximada: linha reta entre a loja e você.');
+    } else {
+      mapNote('Calculando a rota…');
+    }
+
+    if (!tmapFitted) {
+      var pts = coords ? coords.slice() : [];
+      if (!pts.length) {
+        if (origin) pts.push([origin.lat, origin.lon]);
+        if (dest) pts.push([dest.lat, dest.lon]);
+      }
+      if (pts.length) {
+        map.fitBounds(L.latLngBounds(pts).pad(0.2), { animate: false });
+        tmapFitted = true;
+      }
+    }
+
+    var c = d.courier;
+    if (c && c.lat != null && c.lon != null) {
+      var target = [c.lat, c.lon];
+      if (!tmapLayers.courier) {
+        tmapLayers.courier = L.marker(target, {
+          icon: L.divIcon({ className: 'tl-scooter', html: '<span>🛵</span>',
+                            iconSize: [34, 34], iconAnchor: [17, 17] }),
+          zIndexOffset: 600
+        }).addTo(map);
+        tmapLast = target;
+      } else {
+        animateTo(tmapLayers.courier, target);
+      }
+      var age = (Number(d.serverNow) || 0) - (Number(c.updatedAt) || 0);
+      mapNote(c.stale ? 'Sem sinal do motoboy há ' + fmtAge(age) + '.' : '');
+    } else if (coords) {
+      mapNote('O motoboy ainda não começou a compartilhar a posição.');
     }
   }
 
@@ -2120,9 +2318,13 @@
   if (!customerName()) setTimeout(function () { openWelcome(true); }, 450);
 
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) return;
+    if (document.hidden) {
+      if (tmapTimer) { clearInterval(tmapTimer); tmapTimer = null; }
+      return;
+    }
     softRefresh();
     resumeOrderPolls();
+    if (current === 'track') syncTrackView();
   });
   window.addEventListener('focus', softRefresh);
 })();

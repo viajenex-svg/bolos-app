@@ -60,6 +60,17 @@ _geo_cache = None
 _geo_last = [0.0]
 _geo_hits = {}
 
+# rastreio do motoboy — arquivo separado: ping de GPS não regrava o data.json
+TRACK_PATH = os.path.join(BASE, 'tracking.json')
+TRACK_LOCK = threading.RLock()
+TRACK_TTL = 3600                 # entrega encerrada fica 1 h no arquivo
+TRACK_STALE = 45                 # sem ping por 45 s = "sem sinal"
+TRACK_KEEP = 300                 # mesmo limite de pedidos guardados
+ROUTE_FAIL_TTL = 600             # rota falhou: tenta de novo em 10 min
+OSRM_URL = 'https://router.project-osrm.org/route/v1/driving/%f,%f;%f,%f'
+_track_mem = None
+_route_locks = {}
+
 DEFAULT_DELIVERY = {
     'mode': 'fixed',            # 'fixed' (taxa da loja) | 'km' (base + por km)
     'base': 3.0,
@@ -222,7 +233,7 @@ MIME = {
     '.txt': 'text/plain; charset=utf-8',
 }
 
-PUBLIC_FILES_DENY = {'data.json', 'data.seed.json', 'server.py', 'geo-cache.json'}
+PUBLIC_FILES_DENY = {'data.json', 'data.seed.json', 'server.py', 'geo-cache.json', 'tracking.json'}
 
 DEFAULT = {
     'store': {
@@ -966,6 +977,199 @@ def calc_fee(data, cep):
     return out
 
 
+# ------------------------------------------------- rastreio do motoboy
+
+def _track_all():
+    """tracking.json em memória (lazy). Sempre {'version':1,'orders':{...}}."""
+    global _track_mem
+    with TRACK_LOCK:
+        if _track_mem is None:
+            try:
+                with open(TRACK_PATH, encoding='utf-8') as f:
+                    _track_mem = json.load(f)
+            except Exception:
+                _track_mem = {}
+            if not isinstance(_track_mem, dict) or not isinstance(_track_mem.get('orders'), dict):
+                _track_mem = {}
+            _track_mem['version'] = 1
+            _track_mem.setdefault('orders', {})
+        return _track_mem
+
+
+def _track_ent(track, num, create=False):
+    orders = track.setdefault('orders', {})
+    ent = orders.get(str(num))
+    if ent is None and create:
+        ent = {'updatedAt': 0}
+        orders[str(num)] = ent
+    return ent
+
+
+def _track_prune(track, data):
+    """Descarta pedidos inexistentes, entregas velhas e o excedente."""
+    orders = track.get('orders') or {}
+    alive = {str(o.get('num')) for o in data.get('orders', [])}
+    now = int(time.time())
+    for num in list(orders):
+        ent = orders[num] or {}
+        done = ent.get('deliveredAt') or 0
+        if num not in alive or (done and now - int(done) > TRACK_TTL):
+            orders.pop(num, None)
+    if len(orders) > TRACK_KEEP:
+        keep = sorted(orders.items(),
+                      key=lambda kv: kv[1].get('updatedAt') or kv[1].get('startedAt') or 0)
+        orders.clear()
+        orders.update(keep[-TRACK_KEEP:])
+
+
+def _track_save(track, data):
+    """Grava tracking.json de forma atômica e poda."""
+    global _track_mem
+    with TRACK_LOCK:
+        _track_prune(track, data)
+        try:
+            tmp = TRACK_PATH + '.tmp'
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(track, f, ensure_ascii=False, separators=(',', ':'))
+            os.replace(tmp, TRACK_PATH)
+        except Exception:
+            pass
+        _track_mem = track
+
+
+def _track_drop(data, num):
+    """Encerra o rastreio de um pedido (entregue pelo painel)."""
+    track = _track_all()
+    ent = _track_ent(track, num)
+    if not ent:
+        return
+    ent['deliveredAt'] = int(time.time())
+    ent['updatedAt'] = ent['deliveredAt']
+    ent.pop('courier', None)
+    ent.pop('idx', None)
+    _track_save(track, data)
+
+
+def store_origin_any(data):
+    """Coordenadas da loja pelo CEP de origem, em qualquer modo de frete."""
+    st = data.get('store') or {}
+    cep = norm_cep(st.get('originCep'))
+    if not cep:
+        return None
+    try:
+        return float(st['originLat']), float(st['originLon'])
+    except (KeyError, TypeError, ValueError):
+        pass
+    r = resolve_cep(cep)
+    if r.get('lat') is None:
+        return None
+    return float(r['lat']), float(r['lon'])
+
+
+def order_dest(order):
+    """Destino do pedido: coords gravadas na criação ou resolve o CEP antigo."""
+    try:
+        return float(order['destLat']), float(order['destLon'])
+    except (KeyError, TypeError, ValueError):
+        pass
+    cep = norm_cep(order.get('cep'))
+    if not cep:
+        return None
+    r = resolve_cep(cep)
+    if r.get('lat') is None:
+        return None
+    return float(r['lat']), float(r['lon'])
+
+
+def _pt(p):
+    return {'lat': round(float(p[0]), 5), 'lon': round(float(p[1]), 5)} if p else None
+
+
+def _route_key(a, b):
+    return '%.5f,%.5f>%.5f,%.5f' % (a[0], a[1], b[0], b[1])
+
+
+def osrm_route(a, b):
+    """Rota de carro no OSRM público. [lat,lon] na entrada e na saída."""
+    url = OSRM_URL % (a[1], a[0], b[1], b[0]) + '?overview=full&geometries=geojson'
+    try:
+        d = _geo_json(url)
+    except Exception:
+        return None
+    if not isinstance(d, dict) or d.get('code') != 'Ok':
+        return None
+    routes = d.get('routes') or []
+    if not routes or not isinstance(routes[0], dict):
+        return None
+    r = routes[0]
+    coords = []
+    for pt in ((r.get('geometry') or {}).get('coordinates') or []):
+        try:
+            lon, lat = float(pt[0]), float(pt[1])
+        except (IndexError, KeyError, TypeError, ValueError):
+            continue
+        coords.append([round(lat, 5), round(lon, 5)])
+    if len(coords) < 2:
+        return None
+    try:
+        dist = int(round(float(r.get('distance') or 0)))
+        dur = int(round(float(r.get('duration') or 0)))
+    except (TypeError, ValueError):
+        dist, dur = 0, 0
+    return {'coords': coords, 'distanceM': dist, 'durationS': dur}
+
+
+def ensure_route(track, num, a, b):
+    """Rota em cache para origem→destino. Retorna (rota|None, mudou?)."""
+    lock = _route_locks.setdefault(str(num), threading.Lock())
+    with lock:
+        ent = _track_ent(track, num, True)
+        key = _route_key(a, b)
+        route = ent.get('route')
+        if route and route.get('key') == key:
+            return route, False
+        now = int(time.time())
+        if now - int(ent.get('routeFailedAt') or 0) < ROUTE_FAIL_TTL:
+            return route, False
+        r = osrm_route(a, b)
+        if r:
+            r.update({'key': key, 'source': 'osrm', 'createdAt': now})
+            ent['route'] = r
+            ent.pop('routeFailedAt', None)
+        else:
+            ent['routeFailedAt'] = now
+        ent['updatedAt'] = now
+        return ent.get('route'), True
+
+
+def nearest_on_route(coords, lat, lon, start=0):
+    """Índice do ponto mais próximo, sem andar para trás (ruído de GPS)."""
+    n = len(coords)
+    if not n:
+        return 0
+    i0 = max(0, min(int(start or 0), n - 1))
+    best_i, best_d = i0, None
+    for i in range(i0, n):
+        d = haversine_km(lat, lon, coords[i][0], coords[i][1])
+        if best_d is None or d < best_d:
+            best_i, best_d = i, d
+    return best_i
+
+
+def _token_eq(given, expected):
+    try:
+        return bool(expected) and hmac.compare_digest(str(given or ''), str(expected))
+    except Exception:
+        return False
+
+
+def public_order(o):
+    """Pedido sem tokens — só o que o cliente e o motoboy podem ver."""
+    return {'num': o.get('num'), 'status': o.get('status') or 1,
+            'time': o.get('time'), 'createdAt': o.get('createdAt'),
+            'total': o.get('total'), 'name': o.get('name'), 'addr': o.get('addr')}
+
+
 def slug(text):
     s = re.sub(r'[^a-z0-9]+', '-', (text or '').lower()).strip('-')
     return s[:32] or 'item'
@@ -1025,6 +1229,7 @@ class Handler(BaseHTTPRequestHandler):
             line = fmt % args
         except Exception:
             line = fmt
+        line = re.sub(r'([?&]t=)[^&\s"]+', r'\1***', line)   # token não vai para o log
         # API e painel sempre no log (ajuda a diagnosticar login); resto só com SC_VERBOSE
         if os.environ.get('SC_VERBOSE') or '/api/' in line or 'painel' in line:
             print('%s - %s' % (self.address_string(), line), flush=True)
@@ -1090,6 +1295,45 @@ class Handler(BaseHTTPRequestHandler):
 
         return self._static(path)
 
+    def _track_view(self, data, order):
+        """Mapa + rota + posição de um pedido (cliente e motoboy)."""
+        now = int(time.time())
+        status = int(order.get('status') or 1)
+        origin = store_origin_any(data)
+        dest = order_dest(order)
+        out = {'ok': True, 'num': order.get('num'), 'status': status,
+               'serverNow': now, 'staleAfter': TRACK_STALE,
+               'origin': _pt(origin), 'dest': _pt(dest),
+               'route': None, 'courier': None}
+        if status < 3 or not origin or not dest:
+            return out
+
+        track = _track_all()
+        ent = _track_ent(track, order.get('num'), True)
+        route, changed = ensure_route(track, order.get('num'), origin, dest)
+        if changed:
+            _track_save(track, data)
+
+        if route and route.get('coords'):
+            coords = route['coords']
+            n = len(coords) - 1
+            idx = max(0, min(int(ent.get('idx') or 0), n))
+            out['route'] = {'coords': coords,
+                            'distanceM': route.get('distanceM'),
+                            'durationS': route.get('durationS'),
+                            'idx': idx,
+                            'progress': round(idx / float(n), 4) if n > 0 else 0,
+                            'source': route.get('source')}
+        if status == 3:
+            c = ent.get('courier')
+            if isinstance(c, dict) and c.get('updatedAt'):
+                out['courier'] = {'lat': c.get('lat'), 'lon': c.get('lon'),
+                                  'heading': c.get('heading'),
+                                  'speed': c.get('speed'), 'acc': c.get('acc'),
+                                  'updatedAt': c.get('updatedAt'),
+                                  'stale': now - int(c.get('updatedAt') or 0) > TRACK_STALE}
+        return out
+
     def _api_get(self, path, query=None):
         query = query or {}
 
@@ -1113,11 +1357,43 @@ class Handler(BaseHTTPRequestHandler):
                       if str(x.get('num')) == num), None)
             if not o or not token or token != o.get('token'):
                 return self._err(404, 'pedido não encontrado')
-            return self._json({'ok': True, 'order': {
-                'num': o.get('num'), 'status': o.get('status') or 1,
-                'time': o.get('time'), 'createdAt': o.get('createdAt'),
-                'total': o.get('total'), 'name': o.get('name'),
-                'addr': o.get('addr')}})
+            return self._json({'ok': True, 'order': public_order(o)})
+
+        m = re.match(r'^/api/order/([^/]+)/track$', path)
+        if m:
+            ip = self.client_address[0]
+            num = unquote(m.group(1))
+            token = (query.get('t') or [''])[0]
+            if not rate_ok('trk:%s:%s' % (num, str(token)[:8]), 40):
+                return self._err(429, 'muitas consultas, aguarde um instante')
+            if not rate_ok(ip):
+                return self._err(429, 'muitas consultas, aguarde um instante')
+            o = next((x for x in data.get('orders', [])
+                      if str(x.get('num')) == num), None)
+            if not o or not _token_eq(token, o.get('token')):
+                return self._err(404, 'pedido não encontrado')
+            return self._json(self._track_view(data, o))
+
+        if path == '/api/motoboy/order':
+            ip = self.client_address[0]
+            if not rate_ok('mb:%s' % ip):
+                return self._err(429, 'muitas consultas, aguarde um minuto')
+            num = unquote((query.get('num') or [''])[0])
+            token = (query.get('t') or [''])[0]
+            o = next((x for x in data.get('orders', [])
+                      if str(x.get('num')) == num), None)
+            if not o or not _token_eq(token, o.get('mtoken')):
+                return self._err(404, 'link inválido ou expirado')
+            out = self._track_view(data, o)
+            oview = public_order(o)
+            oview.update({
+                'phone': o.get('phone'), 'pay': o.get('pay'),
+                'store': str((data.get('store') or {}).get('name') or '')[:80],
+                'items': [{'name': it.get('name'), 'qty': it.get('qty')}
+                          for it in (o.get('items') or [])],
+            })
+            out['order'] = oview
+            return self._json(out)
 
         if path.startswith('/api/geo/'):
             if not rate_ok(self.client_address[0]):
@@ -1150,6 +1426,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/admin/orders':
             if not self._need_auth():
                 return
+            changed = False
+            for o in data.get('orders', []):
+                if int(o.get('status') or 1) < 4 and not o.get('mtoken'):
+                    o['mtoken'] = uuid.uuid4().hex[:16]   # link do motoboy p/ pedidos antigos
+                    changed = True
+            if changed:
+                save(data)
             return self._json({'orders': data.get('orders', [])})
 
         if path == '/api/admin/backup':
@@ -1194,7 +1477,7 @@ class Handler(BaseHTTPRequestHandler):
     def _static(self, path):
         rel = unquote(path).lstrip('/')
 
-        if not rel or rel.split('/')[0] in PUBLIC_FILES_DENY:
+        if not rel or rel.split('/')[0] in PUBLIC_FILES_DENY or rel.endswith('.tmp'):
             return self._err(403, 'acesso negado')
         if rel.endswith('.py') or rel.startswith('.'):
             return self._err(403, 'acesso negado')
@@ -1253,6 +1536,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/orders':
             return self._create_order(self._body())
 
+        if path == '/api/motoboy/location':
+            return self._motoboy_location(self._body())
+
+        if path == '/api/motoboy/status':
+            return self._motoboy_status(self._body())
+
         if path == '/api/upload':
             if not self._need_auth():
                 return
@@ -1294,8 +1583,16 @@ class Handler(BaseHTTPRequestHandler):
             for o in data.get('orders', []):
                 if str(o.get('num')) == m.group(1):
                     if 'status' in b:
-                        o['status'] = int(b['status'])
+                        try:
+                            st = int(b.get('status'))
+                        except (TypeError, ValueError):
+                            return self._err(400, 'status inválido')
+                        if st < 1 or st > 4:
+                            return self._err(400, 'status inválido')
+                        o['status'] = st
                     save(data)
+                    if int(o.get('status') or 1) == 4:
+                        _track_drop(data, o.get('num'))   # encerra o rastreio
                     return self._json({'ok': True, 'order': o})
             return self._err(404, 'pedido não encontrado')
 
@@ -1556,6 +1853,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._err(409, 'não entregamos nesse endereço (%.1f km)'
                              % (geo.get('km') or 0))
         fee = float(geo.get('fee') or 0)
+
+        # coordenadas do destino para o mapa do rastreio (modo fixo também resolve)
+        dest = None
+        try:
+            if geo.get('lat') is not None and geo.get('lon') is not None:
+                dest = (float(geo['lat']), float(geo['lon']))
+        except (TypeError, ValueError):
+            dest = None
+        if dest is None and cep:
+            r = resolve_cep(cep)
+            if r.get('lat') is not None:
+                dest = (float(r['lat']), float(r['lon']))
         nums = [int(o.get('num', 0)) for o in data['orders'] if str(o.get('num', '')).isdigit()]
         num = (max(nums) + 1) if nums else 1001
 
@@ -1569,9 +1878,12 @@ class Handler(BaseHTTPRequestHandler):
             'name': str(b.get('name') or '')[:60],
             'phone': re.sub(r'\D', '', str(b.get('phone') or ''))[:13],
             'token': uuid.uuid4().hex[:16],
+            'mtoken': uuid.uuid4().hex[:16],
             'cep': geo.get('cep') or cep,
             'km': geo.get('km'),
             'feeSource': geo.get('source'),
+            'destLat': round(dest[0], 5) if dest else None,
+            'destLon': round(dest[1], 5) if dest else None,
             'addr': str(b.get('addr') or st.get('address') or '')[:200],
             'time': time.strftime('%H:%M'),
             'createdAt': int(time.time()),
@@ -1581,7 +1893,108 @@ class Handler(BaseHTTPRequestHandler):
         data['orders'] = data['orders'][:300]
         save(data)
 
-        return self._json({'ok': True, 'order': order})
+        # resposta pública: sem o mtoken (o link do motoboy só sai pelo painel)
+        return self._json({'ok': True,
+                           'order': {k: v for k, v in order.items() if k != 'mtoken'}})
+
+    # ---------- motoboy ----------
+
+    def _motoboy_order(self, b):
+        """Valida num + mtoken. Retorna (pedido, data) ou None (já respondeu)."""
+        num = str(b.get('num') or '')
+        if not rate_ok('mb:%s' % num[:12], 60):
+            self._err(429, 'muitos envios, aguarde um minuto')
+            return None
+        data = load()
+        o = next((x for x in data.get('orders', []) if str(x.get('num')) == num), None)
+        if not o or not _token_eq(b.get('t'), o.get('mtoken')):
+            self._err(404, 'link inválido ou expirado')
+            return None
+        return o, data
+
+    def _motoboy_location(self, b):
+        got = self._motoboy_order(b)
+        if not got:
+            return
+        o, data = got
+        num = str(o.get('num'))
+        if int(o.get('status') or 1) != 3:
+            return self._json({'error': 'entrega não está em andamento',
+                               'status': o.get('status') or 1}, 409)
+        try:
+            lat, lon = float(b.get('lat')), float(b.get('lon'))
+        except (TypeError, ValueError):
+            return self._err(400, 'posição inválida')
+        if not _inside_brazil(lat, lon):
+            return self._err(400, 'posição inválida')
+
+        def clamp(v, lo, hi):
+            try:
+                return max(lo, min(hi, float(v)))
+            except (TypeError, ValueError):
+                return None
+
+        acc = clamp(b.get('acc'), 0, 5000)
+        speed = clamp(b.get('speed'), 0, 90)
+        heading = clamp(b.get('heading'), 0, 360)
+        if heading is not None:
+            heading = int(round(heading)) % 360
+
+        now = int(time.time())
+        track = _track_all()
+        ent = _track_ent(track, num, True)
+        ent['courier'] = {'lat': round(lat, 5), 'lon': round(lon, 5),
+                          'heading': heading,
+                          'speed': round(speed, 1) if speed is not None else None,
+                          'acc': int(round(acc)) if acc is not None else None,
+                          'updatedAt': now}
+        idx = int(ent.get('idx') or 0)
+        route = ent.get('route') or {}
+        coords = route.get('coords') or []
+        if coords:
+            idx = nearest_on_route(coords, lat, lon, idx)
+            ent['idx'] = idx
+        ent['updatedAt'] = now
+        _track_save(track, data)
+        n = len(coords) - 1
+        return self._json({'ok': True, 'updatedAt': now, 'idx': idx,
+                           'progress': round(idx / float(n), 4) if n > 0 else 0})
+
+    def _motoboy_status(self, b):
+        got = self._motoboy_order(b)
+        if not got:
+            return
+        o, data = got
+        num = str(o.get('num'))
+        try:
+            want = int(b.get('status'))
+        except (TypeError, ValueError):
+            return self._err(400, 'status inválido')
+        if want not in (3, 4):
+            return self._err(400, 'status inválido')
+        cur = int(o.get('status') or 1)
+        if want < cur:
+            return self._err(409, 'o pedido já está em outra etapa')
+        if want == cur:
+            return self._json({'ok': True, 'order': public_order(o)})
+
+        o['status'] = want
+        save(data)
+        now = int(time.time())
+        track = _track_all()
+        ent = _track_ent(track, num, True)
+        ent['updatedAt'] = now
+        if want == 3:
+            ent['startedAt'] = ent.get('startedAt') or now
+            origin, dest = store_origin_any(data), order_dest(o)
+            if origin and dest:
+                ensure_route(track, num, origin, dest)
+        else:
+            ent['deliveredAt'] = now
+            ent.pop('courier', None)   # posição some ao entregar
+            ent.pop('idx', None)
+        _track_save(track, data)
+        return self._json({'ok': True, 'order': public_order(o)})
 
 
 def main():

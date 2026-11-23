@@ -473,6 +473,31 @@ button { cursor: pointer; }
 
 .wa-link:hover { background: #188548; }
 
+.mb-line { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.mb-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.mb-link:hover { background: var(--accent-d); }
+.mb-copy {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.mb-copy:hover { background: var(--bg); }
+
 .status-btns { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
 .status-btns button {
   border: 1px solid var(--line);

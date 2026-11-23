@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Entrega — Delícias do Aleff</title>
+  <meta name="theme-color" content="#17110d">
+  <meta name="robots" content="noindex">
+  <meta name="referrer" content="no-referrer">
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/motoboy/motoboy.css?v=1">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <span class="dot" id="liveDot"></span>
+      <b id="brandName">Delícias do Aleff</b>
+      <span class="num" id="orderNum" hidden></span>
+    </div>
+    <span class="pill" id="statusPill">…</span>
+  </header>
+
+  <div class="loading" id="loading"><span class="spin"></span> Carregando entrega…</div>
+
+  <div class="error-card" id="errorCard" hidden>
+    <div class="err-ico">🔗</div>
+    <h1 id="errTitle">Link inválido</h1>
+    <p id="errMsg">Peça um link novo no painel da loja.</p>
+    <a class="ghost" href="/painel/">Abrir painel</a>
+  </div>
+
+  <main id="main" hidden>
+
+    <section class="card who">
+      <div class="who-top">
+        <div>
+          <div class="lbl">Cliente</div>
+          <div class="big" id="cName">—</div>
+        </div>
+        <a class="call" id="callBtn" href="#" hidden>📞</a>
+      </div>
+      <div class="lbl">Entregar em</div>
+      <p class="addr" id="cAddr">—</p>
+      <div class="meta">
+        <span id="cPay">—</span>
+        <span class="sep">·</span>
+        <span id="cTotal">—</span>
+      </div>
+    </section>
+
+    <section class="card items" id="itemsCard" hidden></section>
+
+    <section class="map-card" id="mapCard" hidden>
+      <div class="map" id="map"></div>
+      <div class="map-line" id="mapLine">Rota da loja até o cliente</div>
+    </section>
+
+    <section class="gps" id="gpsBox" hidden>
+      <span class="gps-dot" id="gpsDot"></span>
+      <div class="gps-txt">
+        <b id="gpsTitle">GPS ativo</b>
+        <span id="gpsSub">Procurando sinal…</span>
+      </div>
+      <button class="ghost" id="gpsRetry" type="button" hidden>Tentar</button>
+    </section>
+  </main>
+
+  <div class="done-card" id="doneCard" hidden>
+    <div class="done-ico">✓</div>
+    <h1>Entrega concluída</h1>
+    <p>O cliente já viu o pedido como entregue. Pode fechar esta página.</p>
+  </div>
+
+</div>
+
+<div class="bar" id="bar" hidden>
+  <button class="btn" id="actionBtn" type="button">Iniciar entrega</button>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="/vendor/leaflet/leaflet.js"></script>
+<script src="/motoboy/motoboy.js?v=1"></script>
+</body>
+</html>

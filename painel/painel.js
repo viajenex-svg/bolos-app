@@ -303,6 +303,9 @@
           ' saiu para entrega 🛵 Já está a caminho.';
         waHref = 'https://wa.me/' + full + '?text=' + encodeURIComponent(msg);
       }
+      var mbHref = o.mtoken
+        ? location.origin + '/motoboy/?o=' + encodeURIComponent(o.num) + '&t=' + encodeURIComponent(o.mtoken)
+        : '';
       var btns = STATUS.map(function (label, i) {
         var n = i + 1;
         var cls = n === st ? 'on' : (n === st + 1 ? 'next' : '');
@@ -320,6 +323,10 @@
         '<span>💳 ' + esc(PAY[o.pay] || o.pay || '—') + '</span>' +
         '</div>' +
         (waHref ? '<a class="wa-link" href="' + waHref + '" target="_blank" rel="noopener">💬 Avisar no WhatsApp</a>' : '') +
+        (mbHref ? '<div class="mb-line">' +
+          '<a class="mb-link" href="' + esc(mbHref) + '" target="_blank" rel="noopener">🛵 Link do motoboy</a>' +
+          '<button type="button" class="mb-copy" data-copy="' + esc(mbHref) + '">Copiar link</button>' +
+          '</div>' : '') +
         '<div class="status-btns">' + btns + '</div>' +
         '</article>';
     }).join('');
@@ -1345,7 +1352,35 @@
 
   $('#refreshOrders').addEventListener('click', function () { pollOrders(); toast('Atualizado'); });
 
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (resolve, reject) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (err) {}
+      document.body.removeChild(ta);
+      if (ok) resolve();
+      else reject(new Error('não consegui copiar'));
+    });
+  }
+
   $('#ordersList').addEventListener('click', function (e) {
+    var copyBtn = e.target.closest('[data-copy]');
+    if (copyBtn) {
+      copyText(copyBtn.dataset.copy)
+        .then(function () { toast('Link do motoboy copiado'); })
+        .catch(function (err) { toast(err.message); });
+      return;
+    }
+
     var btn = e.target.closest('[data-status]');
     if (!btn) return;
     var card = btn.closest('.order');

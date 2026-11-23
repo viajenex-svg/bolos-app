@@ -8,3 +8,6 @@ deploy-fly.sh
 Dockerfile
 fly.toml
 .dockerignore
+tracking.json
+tracking.json.tmp
+.agent.log

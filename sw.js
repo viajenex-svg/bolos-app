@@ -1,7 +1,7 @@
 /* Delícias do Aleff · Bolos — service worker
    pré-cache do app shell, cache-first com atualização em segundo plano */
 
-var CACHE = 'sc-bolos-v17';
+var CACHE = 'sc-bolos-v18';
 
 var SHELL = [
   './',
@@ -27,7 +27,14 @@ var SHELL = [
   './img/kit-festa.webp',
   './img/bebida.webp',
   './img/banner-bolos.webp',
-  './img/logo-bolos-mark.png'
+  './img/logo-bolos-mark.png',
+  './vendor/leaflet/leaflet.js',
+  './vendor/leaflet/leaflet.css',
+  './vendor/leaflet/images/marker-icon.png',
+  './vendor/leaflet/images/marker-icon-2x.png',
+  './vendor/leaflet/images/marker-shadow.png',
+  './vendor/leaflet/images/layers.png',
+  './vendor/leaflet/images/layers-2x.png'
 ];
 
 self.addEventListener('install', function (e) {
@@ -58,6 +65,7 @@ self.addEventListener('fetch', function (e) {
   if (url.pathname.indexOf('/api/') === 0) return; /* API do painel: sempre da rede */
   if (url.pathname.indexOf('/painel') === 0) return; /* painel admin nunca vem do cache */
   if (url.pathname.indexOf('/pedidos') === 0) return; /* quadro de pedidos sempre da rede */
+  if (url.pathname.indexOf('/motoboy') === 0) return; /* link do motoboy tem token na URL: nunca cachear */
 
   /* navegação (HTML): rede primeiro, cache só como reserva offline —
      assim uma página nova nunca fica presa numa versão velha */

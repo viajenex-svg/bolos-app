@@ -15,7 +15,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=29">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="style.css?v=30">
 </head>
 <body>
 
@@ -222,6 +223,12 @@
       <h2 id="trackStatus">Pedido recebido</h2>
       <p>O forno já está aquecendo.</p>
     </div>
+
+    <div class="track-map-wrap" id="trackMapWrap" hidden>
+      <div class="track-map" id="trackMap" role="img" aria-label="Mapa do entregador a caminho"></div>
+      <div class="track-map-note" id="trackMapNote" hidden></div>
+    </div>
+    <p class="track-map-hint" id="trackMapHint">O mapa ao vivo aparece quando o pedido sair para entrega.</p>
 
     <ol class="timeline" id="timeline">
       <li class="done"><span class="tl-dot"></span><div><b>Pedido recebido</b><small>Confirmado às <span id="tlTime">—</span></small></div></li>
@@ -466,6 +473,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </div>
 
-<script src="app.js?v=39"></script>
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="app.js?v=40"></script>
 </body>
 </html>

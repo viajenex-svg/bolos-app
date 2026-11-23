@@ -1058,6 +1058,53 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .track-card .tline { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; color: var(--muted); }
 .track-card .tline b { color: var(--ink); font-weight: 600; }
 
+/* mapa ao vivo do motoboy */
+.track-map-wrap[hidden], .track-map-hint[hidden], .track-map-note[hidden] { display: none; }
+.track-map-wrap { margin: 0 0 18px; }
+
+.track-map {
+  height: 240px;
+  border-radius: 18px;
+  overflow: hidden;
+  position: relative;
+  z-index: 0;                       /* panes do Leaflet não passam por cima de sheets */
+  background: var(--bg-2);
+  box-shadow: var(--shadow);
+}
+
+.track-map .leaflet-control-attribution { font-size: 9px; }
+
+.track-map-note {
+  margin-top: 8px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.track-map-hint {
+  margin: -6px 6px 16px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.tl-scooter { background: none !important; border: 0 !important; }
+.tl-scooter span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(64, 38, 20, .35);
+  font-size: 19px;
+  line-height: 1;
+}
+
 .track-total {
   display: flex;
   justify-content: space-between;
