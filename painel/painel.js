@@ -6,6 +6,7 @@
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
 
   var PIN_KEY = 'sc-admin-pin';
+  var TAB_KEY = 'sc-admin-tab';
   var pin = localStorage.getItem(PIN_KEY) || '';
 
   var state = { store: {}, products: [], orders: [] };
@@ -154,6 +155,9 @@
     $('#login').hidden = true;
     $('#app').hidden = false;
     loadAll().then(function () {
+      /* recarregou a página: volta para a aba em que estava */
+      var saved = localStorage.getItem(TAB_KEY);
+      if (saved && saved !== activeTab && $('#tab-' + saved)) setTab(saved);
       if (window.innerWidth > 760) $('#pinInput').blur();
     });
     clearInterval(pollTimer);
@@ -977,6 +981,7 @@
 
   function setTab(name) {
     activeTab = name;
+    try { localStorage.setItem(TAB_KEY, name); } catch (e) {}
     $$('.tab').forEach(function (b) { b.classList.toggle('is-active', b.dataset.tab === name); });
     $$('.panel').forEach(function (p) { p.hidden = p.id !== 'tab-' + name; });
     window.scrollTo(0, 0);
