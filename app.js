@@ -1434,6 +1434,7 @@
       store.coupon = null;
       $('#couponInput').value = '';
       save();
+      attachPush(order);   /* quem já ativou os avisos continua recebendo */
       renderBadge();
       renderCart();
       restore();
@@ -1492,6 +1493,7 @@
 
     setStatus(order.status || 1);
     startOrderPoll(num);   /* confere o status na hora ao abrir o acompanhamento */
+    refreshPushBtn(num);
 
     $('#receiptBtn').onclick = function () { openReceipt(order); };
 
@@ -1514,6 +1516,143 @@
       go('cart');
       toast('Itens adicionados ao carrinho');
     };
+  }
+
+  /* ---------------- avisos push (a caminho / entregue) ---------------- */
+
+  var pushBusy = false;
+
+  function pushSupported() {
+    return ('Notification' in window) && ('serviceWorker' in navigator) &&
+           ('PushManager' in window) && window.isSecureContext;
+  }
+
+  function isStandalone() {
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+           navigator.standalone === true;
+  }
+
+  function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent);
+  }
+
+  function b64ToBytes(b64) {
+    var s = String(b64).replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    var raw = atob(s);
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  function pushKey() {
+    return fetch('api/push/key', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { return j && j.key; });
+  }
+
+  function postSub(order, sub) {
+    var j = sub.toJSON ? sub.toJSON() : sub;
+    return fetch('api/order/' + encodeURIComponent(order.num) + '/push?t=' +
+                 encodeURIComponent(order.token), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(j)
+    }).then(function (r) {
+      if (!r.ok) throw new Error('falha ao salvar inscrição (' + r.status + ')');
+      return r.json();
+    });
+  }
+
+  function freshSubscription(key) {
+    return navigator.serviceWorker.ready.then(function (reg) {
+      return reg.pushManager.getSubscription().then(function (sub) {
+        if (sub) return sub;
+        return reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: b64ToBytes(key)
+        });
+      });
+    });
+  }
+
+  /* pedido novo de quem já aceitou avisos: cadastra sem pedir permissão de novo */
+  function attachPush(order) {
+    if (!pushSupported() || !order || !order.token) return;
+    if (Notification.permission !== 'granted') return;
+    pushKey().then(function (key) {
+      if (!key) return;
+      return freshSubscription(key).then(function (sub) { return postSub(order, sub); });
+    }).catch(function () { /* sem aviso: tenta de novo quando abrir o acompanhamento */ });
+  }
+
+  function enablePush(order, btn) {
+    if (pushBusy) return;
+    pushBusy = true;
+    btn.disabled = true;
+    btn.textContent = 'Ativando…';
+    var key = null;
+    Notification.requestPermission().then(function (perm) {
+      if (perm !== 'granted') throw new Error('permissao');
+      return pushKey();
+    }).then(function (k) {
+      key = k;
+      if (!key) throw new Error('sem-chave');
+      return freshSubscription(key);
+    }).then(function (sub) {
+      return postSub(order, sub);
+    }).then(function () {
+      btn.textContent = 'Avisos ativados ✓';
+      toast('Pronto! Vamos avisar quando sair para entrega 🔔');
+    }).catch(function (e) {
+      btn.disabled = false;
+      btn.textContent = '🔔 Avisar quando sair para entrega';
+      if (e && e.message === 'permissao') toast('Sem permissão de notificação 😕');
+      else if (e && e.message === 'sem-chave') toast('Avisos disponíveis só na versão online');
+      else toast('Não foi possível ativar os avisos agora');
+    }).then(function () { pushBusy = false; });
+  }
+
+  function refreshPushBtn(num) {
+    var btn = $('#pushBtn');
+    var note = $('#pushNote');
+    if (!btn) return;
+    btn.onclick = null;
+    btn.disabled = false;
+    btn.hidden = true;
+    if (note) note.hidden = true;
+    if (!pushSupported()) return;
+
+    var order = orderByNum(num);
+    if (!order || !order.token || intStatus(order) >= 4) return;
+    btn.hidden = false;
+
+    if (isIOS() && !isStandalone()) {
+      btn.textContent = '🔔 Avisar no celular';
+      if (note) {
+        note.hidden = false;
+        note.textContent = 'No iPhone, adicione o site à tela de início (Compartilhar → Adicionar à Tela de Início) para receber os avisos.';
+      }
+      btn.onclick = function () { toast('Adicione o site à tela de início para ativar'); };
+      return;
+    }
+    if (Notification.permission === 'granted') {
+      btn.textContent = 'Avisos ativados ✓';
+      btn.disabled = true;
+      attachPush(order);
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      btn.textContent = 'Avisos bloqueados no navegador';
+      btn.onclick = function () { toast('Libere as notificações nas configurações do site'); };
+      return;
+    }
+    btn.textContent = '🔔 Avisar quando sair para entrega';
+    btn.onclick = function () { enablePush(order, btn); };
+  }
+
+  function intStatus(order) {
+    return order && order.status ? Number(order.status) : 1;
   }
 
   /* ---------------- recibo ---------------- */
@@ -1925,7 +2064,10 @@
     if (st <= prev) return;
     o.status = st;
     save();
-    if (current === 'track' && $('#trackNum').textContent === '#' + num) setStatus(st);
+    if (current === 'track' && $('#trackNum').textContent === '#' + num) {
+      setStatus(st);
+      refreshPushBtn(num);   /* entregue: o botão de avisos some */
+    }
     announceStatus(num, st);
     if (st >= 4) stopOrderPoll(num);
   }
@@ -2249,6 +2391,13 @@
     window.addEventListener('load', function () {
       navigator.serviceWorker.register('sw.js').catch(function () {});
     });
+    /* tocar na notificação de "a caminho" abre o acompanhamento do pedido */
+    navigator.serviceWorker.addEventListener('message', function (e) {
+      var m = e.data || {};
+      if (m.type === 'push-track' && m.num && orderByNum(String(m.num))) {
+        showTrack(String(m.num));
+      }
+    });
   }
 
   var installEvt = null;
@@ -2399,6 +2548,15 @@
 
   /* recarregou a página: volta para a tela em que o cliente estava */
   (function restoreNav() {
+    /* link da notificação: ?pedido=<num> abre direto o acompanhamento */
+    var pushNum = null;
+    try { pushNum = new URLSearchParams(location.search).get('pedido'); } catch (e) {}
+    if (pushNum && orderByNum(pushNum)) {
+      showTrack(pushNum);
+      try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) {}
+      return;
+    }
+
     var nav = null;
     try { nav = JSON.parse(sessionStorage.getItem(NAV_KEY) || 'null'); } catch (e) {}
     if (!nav || !nav.screen || nav.screen === 'home') return;

@@ -1,1 +1,2 @@
 psycopg[binary]>=3.2,<4
+pywebpush>=1.14,<3

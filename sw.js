@@ -1,7 +1,7 @@
 /* Delícias do Aleff · Bolos — service worker
    pré-cache do app shell, cache-first com atualização em segundo plano */
 
-var CACHE = 'sc-bolos-v22';
+var CACHE = 'sc-bolos-v23';
 
 var SHELL = [
   './',
@@ -93,6 +93,48 @@ self.addEventListener('fetch', function (e) {
       }).catch(function () { return hit; });
 
       return hit || network;
+    })
+  );
+});
+
+/* ---------------- avisos push (a caminho / entregue) ---------------- */
+
+self.addEventListener('push', function (e) {
+  var d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) { d = {}; }
+  var num = d.num ? String(d.num) : '';
+  var status = Number(d.status) || 3;
+  var title = d.title || (num ? 'Pedido #' + num : 'Delícias do Aleff');
+  var opts = {
+    body: d.body || 'Seu pedido atualizou.',
+    icon: 'icons/icon-192.png',
+    badge: 'icons/apple-touch-icon.png',
+    tag: d.tag || ('order-' + num),
+    renotify: true,
+    vibrate: [200, 100, 200],
+    requireInteraction: status === 3,
+    data: { url: d.url || './', num: num, status: status }
+  };
+  e.waitUntil(self.registration.showNotification(title, opts));
+});
+
+self.addEventListener('notificationclick', function (e) {
+  e.notification.close();
+  var data = e.notification.data || {};
+  var target = data.url || './';
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
+      for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        /* painel, quadro e app do motoboy não são o app do cliente */
+        if (c.url.indexOf('/painel') !== -1 || c.url.indexOf('/pedidos') !== -1 ||
+            c.url.indexOf('/motoboy') !== -1) continue;
+        return c.focus().then(function (win) {
+          if (win && data.num) win.postMessage({ type: 'push-track', num: String(data.num) });
+          return win;
+        });
+      }
+      return clients.openWindow(target);
     })
   );
 });

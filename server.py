@@ -28,6 +28,15 @@ try:
 except Exception:  # pragma: no cover
     Image = None
 
+# Web Push é opcional: no Termux (sem as libs) o app funciona, só sem avisos.
+try:
+    from pywebpush import webpush as _webpush, WebPushException as _WebPushException
+except Exception:  # pragma: no cover
+    _webpush = None
+
+    class _WebPushException(Exception):
+        pass
+
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(BASE, 'data.json')
 UPLOAD_DIR = os.path.join(BASE, 'uploads')
@@ -38,6 +47,12 @@ LOCK = threading.RLock()
 
 MAX_BODY = 8 * 1024 * 1024      # 8 MB
 MAX_UPLOAD = 4 * 1024 * 1024    # 4 MB de imagem
+
+# notificações push (avisos de "a caminho" e "entregue" com o app fechado)
+PUSH_TTL = 3600                 # push válido por 1 h na fila do serviço
+PUSH_MAX_SUBS = 5               # aparelhos por pedido
+PUSH_CONTACT = (os.environ.get('PUSH_CONTACT', '').strip()
+                or 'mailto:contato@deliciasdoaleff.com')
 
 # --- persistência -------------------------------------------------------
 # Sem DATABASE_URL (Termux) usa data.json + uploads/ como sempre.
@@ -1170,6 +1185,132 @@ def public_order(o):
             'total': o.get('total'), 'name': o.get('name'), 'addr': o.get('addr')}
 
 
+# ----------------------------------------------------------------- push
+
+def _gen_vapid():
+    """Gera um par EC P-256; devolve PEM privado + ponto público base64url."""
+    try:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ec
+    except Exception:
+        return None
+    key = ec.generate_private_key(ec.SECP256R1())
+    pem = key.private_bytes(serialization.Encoding.PEM,
+                            serialization.PrivateFormat.PKCS8,
+                            serialization.NoEncryption()).decode('ascii')
+    nums = key.public_key().public_numbers()
+    raw = b'\x04' + nums.x.to_bytes(32, 'big') + nums.y.to_bytes(32, 'big')
+    pub = base64.urlsafe_b64encode(raw).rstrip(b'=').decode('ascii')
+    return {'private': pem, 'public': pub, 'createdAt': int(time.time()),
+            'subject': PUSH_CONTACT}
+
+
+def ensure_push_cfg(data=None):
+    """Env > chaves persistidas > gera uma vez. None = push indisponível."""
+    pub = os.environ.get('PUSH_VAPID_PUBLIC', '').strip()
+    priv = os.environ.get('PUSH_VAPID_PRIVATE', '').strip()
+    if pub and priv:
+        return {'public': pub, 'private': priv, 'subject': PUSH_CONTACT}
+    if isinstance(data, dict):
+        cfg = data.get('push_cfg')
+        if isinstance(cfg, dict) and cfg.get('public') and cfg.get('private'):
+            cfg.setdefault('subject', PUSH_CONTACT)
+            return cfg
+    with LOCK:                       # RLock: load()/save() reentrantes
+        fresh = load()
+        cfg = fresh.get('push_cfg')
+        if isinstance(cfg, dict) and cfg.get('public') and cfg.get('private'):
+            cfg.setdefault('subject', PUSH_CONTACT)
+            return cfg
+        cfg = _gen_vapid()
+        if not cfg:
+            return None
+        fresh['push_cfg'] = cfg
+        save(fresh)
+        return cfg
+
+
+def _push_payload(num, status):
+    num = str(num)
+    if status == 4:
+        title, body = 'Pedido entregue ✓', 'Seu pedido #%s foi entregue. Bom apetite!' % num
+    else:
+        title, body = 'Saiu para entrega! 🛵', 'Seu pedido #%s está a caminho.' % num
+    return {'title': title, 'body': body, 'tag': 'order-%s' % num,
+            'url': './?pedido=%s' % quote(num), 'num': num, 'status': status}
+
+
+def _push_notify(data, order, status):
+    """Agenda o envio em thread daemon; nunca atrasa nem derruba a resposta."""
+    if status not in (3, 4) or _webpush is None:
+        return
+    subs = [dict(s) for s in (order.get('push_subs') or []) if s.get('endpoint')]
+    if not subs or not order.get('num'):
+        return
+    threading.Thread(target=_push_send, daemon=True,
+                     args=(str(order.get('num')), status, subs)).start()
+
+
+def _push_send(num, status, subs):
+    if _webpush is None:
+        return
+    cfg = ensure_push_cfg()
+    if not cfg:
+        return
+    payload = json.dumps(_push_payload(num, status), ensure_ascii=False)
+    gone = []
+    for s in subs:
+        info = {'endpoint': s.get('endpoint'), 'keys': s.get('keys') or {}}
+        try:
+            _webpush(subscription_info=info, data=payload,
+                     vapid_private_key=cfg['private'],
+                     vapid_claims={'sub': cfg.get('subject') or PUSH_CONTACT},
+                     ttl=PUSH_TTL, timeout=10,
+                     headers={'Urgency': 'high'})
+        except _WebPushException as e:
+            code = getattr(getattr(e, 'response', None), 'status_code', None)
+            if code in (404, 410):
+                gone.append(info['endpoint'])
+        except Exception:
+            pass
+    if gone:
+        _push_prune(num, gone)
+
+
+def _push_prune(num, endpoints):
+    """Remove inscrições que o serviço de push disse que não existem mais."""
+    gone = set(endpoints)
+    with LOCK:
+        data = load()
+        for o in data.get('orders', []):
+            if str(o.get('num')) == str(num):
+                subs = o.get('push_subs') or []
+                kept = [s for s in subs if s.get('endpoint') not in gone]
+                if len(kept) != len(subs):
+                    o['push_subs'] = kept
+                    save(data)
+                break
+
+
+def _clean_sub(b):
+    """Valida e enxuga a inscrição enviada pelo navegador."""
+    if not isinstance(b, dict):
+        return None
+    ep = str(b.get('endpoint') or '').strip()
+    keys = b.get('keys') if isinstance(b.get('keys'), dict) else {}
+    p256 = str(keys.get('p256dh') or '').strip()
+    auth = str(keys.get('auth') or '').strip()
+    if not ep.startswith('https://') or not p256 or not auth:
+        return None
+    if len(ep) > 1500 or len(p256) > 200 or len(auth) > 100:
+        return None
+    sub = {'endpoint': ep, 'keys': {'p256dh': p256, 'auth': auth}}
+    exp = b.get('expirationTime')
+    if isinstance(exp, (int, float)):
+        sub['expirationTime'] = int(exp)
+    return sub
+
+
 def slug(text):
     s = re.sub(r'[^a-z0-9]+', '-', (text or '').lower()).strip('-')
     return s[:32] or 'item'
@@ -1342,6 +1483,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/ping':
             return self._json({'ok': True, 'ts': int(time.time())})
 
+        if path == '/api/push/key':
+            if _webpush is None:
+                return self._json({'key': None})
+            cfg = ensure_push_cfg()
+            return self._json({'key': cfg['public'] if cfg else None})
+
         data = load()
 
         if path == '/api/menu':
@@ -1418,6 +1565,7 @@ class Handler(BaseHTTPRequestHandler):
             if not self._need_auth():
                 return
             data = dict(data)
+            data.pop('push_cfg', None)      # a chave privada VAPID nunca sai daqui
             data['store'] = dict(data['store'],
                                  openNow=is_open_now(data['store']),
                                  hoursText=hours_text(data['store']))
@@ -1438,7 +1586,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/api/admin/backup':
             if not self._need_auth():
                 return
-            body = json.dumps(data, ensure_ascii=False, indent=1).encode('utf-8')
+            # sem a chave privada VAPID nem inscrições: o backup pode ir para
+            # artefato público do GitHub e ninguém deve poder enviar push
+            safe = json.loads(json.dumps(data, ensure_ascii=False))
+            safe.pop('push_cfg', None)
+            for o in safe.get('orders', []):
+                o.pop('push_subs', None)
+            body = json.dumps(safe, ensure_ascii=False, indent=1).encode('utf-8')
             stamp = time.strftime('%Y-%m-%d')
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
@@ -1525,7 +1679,13 @@ class Handler(BaseHTTPRequestHandler):
     # ---------- POST ----------
 
     def do_POST(self):
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
+        query = parse_qs(parsed.query)
+
+        m = re.match(r'^/api/order/([^/]+)/push$', path)
+        if m:
+            return self._push_subscribe(unquote(m.group(1)), query)
 
         if path == '/api/auth':
             b = self._body()
@@ -1582,6 +1742,8 @@ class Handler(BaseHTTPRequestHandler):
             data = load()
             for o in data.get('orders', []):
                 if str(o.get('num')) == m.group(1):
+                    old = int(o.get('status') or 1)
+                    new = old
                     if 'status' in b:
                         try:
                             st = int(b.get('status'))
@@ -1589,10 +1751,13 @@ class Handler(BaseHTTPRequestHandler):
                             return self._err(400, 'status inválido')
                         if st < 1 or st > 4:
                             return self._err(400, 'status inválido')
+                        new = st
                         o['status'] = st
                     save(data)
-                    if int(o.get('status') or 1) == 4:
+                    if new == 4:
                         _track_drop(data, o.get('num'))   # encerra o rastreio
+                    if new in (3, 4) and new != old:
+                        _push_notify(data, o, new)        # avisa o cliente
                     return self._json({'ok': True, 'order': o})
             return self._err(404, 'pedido não encontrado')
 
@@ -1632,6 +1797,32 @@ class Handler(BaseHTTPRequestHandler):
         return self._json({'ok': True})
 
     # ---------- ações ----------
+
+    def _push_subscribe(self, num, query):
+        """Guarda a inscrição de push do aparelho para este pedido."""
+        if _webpush is None:
+            return self._err(503, 'avisos indisponíveis nesta versão')
+        if not rate_ok('pweb:%s' % self.client_address[0], 30):
+            return self._err(429, 'muitas inscrições, aguarde um minuto')
+        token = (query.get('t') or [''])[0]
+        sub = _clean_sub(self._body())
+        if not sub:
+            return self._err(400, 'inscrição inválida')
+        with LOCK:
+            data = load()
+            o = next((x for x in data.get('orders', [])
+                      if str(x.get('num')) == num), None)
+            if not o or not _token_eq(token, o.get('token')):
+                return self._err(404, 'pedido não encontrado')
+            if int(o.get('status') or 1) >= 4:
+                return self._err(409, 'pedido já entregue')
+            subs = [s for s in (o.get('push_subs') or [])
+                    if s.get('endpoint') != sub['endpoint']]
+            subs.append(sub)
+            o['push_subs'] = subs[-PUSH_MAX_SUBS:]
+            save(data)
+            count = len(o['push_subs'])
+        return self._json({'ok': True, 'count': count})
 
     def _save_store(self, b):
         data = load()
@@ -1996,6 +2187,7 @@ class Handler(BaseHTTPRequestHandler):
 
         o['status'] = want
         save(data)
+        _push_notify(data, o, want)       # avisa o cliente (a caminho / entregue)
         now = int(time.time())
         track = _track_all()
         ent = _track_ent(track, num, True)
