@@ -1188,21 +1188,42 @@ def public_order(o):
 # ----------------------------------------------------------------- push
 
 def _gen_vapid():
-    """Gera um par EC P-256; devolve PEM privado + ponto público base64url."""
+    """Gera um par EC P-256; devolve DER privado e ponto público em base64url.
+
+    O pywebpush não lê PEM: ele decodifica a string como base64url e espera
+    DER (ou a chave crua de 32 bytes). Por isso guardamos DER em base64url.
+    """
     try:
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric import ec
     except Exception:
         return None
     key = ec.generate_private_key(ec.SECP256R1())
-    pem = key.private_bytes(serialization.Encoding.PEM,
+    der = key.private_bytes(serialization.Encoding.DER,
                             serialization.PrivateFormat.PKCS8,
-                            serialization.NoEncryption()).decode('ascii')
+                            serialization.NoEncryption())
+    priv = base64.urlsafe_b64encode(der).rstrip(b'=').decode('ascii')
     nums = key.public_key().public_numbers()
     raw = b'\x04' + nums.x.to_bytes(32, 'big') + nums.y.to_bytes(32, 'big')
     pub = base64.urlsafe_b64encode(raw).rstrip(b'=').decode('ascii')
-    return {'private': pem, 'public': pub, 'createdAt': int(time.time()),
-            'subject': PUSH_CONTACT}
+    return {'private': priv, 'public': pub, 'createdAt': int(time.time()),
+            'subject': PUSH_CONTACT, 'fmt': 'der-pkcs8'}
+
+
+def _vapid_der(priv):
+    """Aceita chave no formato atual (DER base64url) ou PEM antigo."""
+    priv = str(priv or '').strip()
+    if 'BEGIN' not in priv:
+        return priv
+    try:
+        from cryptography.hazmat.primitives import serialization
+        key = serialization.load_pem_private_key(priv.encode('ascii'), password=None)
+        der = key.private_bytes(serialization.Encoding.DER,
+                                serialization.PrivateFormat.PKCS8,
+                                serialization.NoEncryption())
+        return base64.urlsafe_b64encode(der).rstrip(b'=').decode('ascii')
+    except Exception:
+        return priv
 
 
 def ensure_push_cfg(data=None):
@@ -1258,21 +1279,29 @@ def _push_send(num, status, subs):
     if not cfg:
         return
     payload = json.dumps(_push_payload(num, status), ensure_ascii=False)
+    priv = _vapid_der(cfg.get('private'))
     gone = []
+    sent = 0
     for s in subs:
         info = {'endpoint': s.get('endpoint'), 'keys': s.get('keys') or {}}
         try:
             _webpush(subscription_info=info, data=payload,
-                     vapid_private_key=cfg['private'],
+                     vapid_private_key=priv,
                      vapid_claims={'sub': cfg.get('subject') or PUSH_CONTACT},
                      ttl=PUSH_TTL, timeout=10,
                      headers={'Urgency': 'high'})
+            sent += 1
         except _WebPushException as e:
             code = getattr(getattr(e, 'response', None), 'status_code', None)
             if code in (404, 410):
                 gone.append(info['endpoint'])
-        except Exception:
-            pass
+            else:
+                print('push %s: erro %s %s' % (num, code or '?', str(e)[:200]),
+                      flush=True)
+        except Exception as e:
+            print('push %s: falhou (%s)' % (num, str(e)[:200]), flush=True)
+    if sent:
+        print('push %s: %d aviso(s) enviado(s)' % (num, sent), flush=True)
     if gone:
         _push_prune(num, gone)
 
