@@ -1795,6 +1795,10 @@ class Handler(BaseHTTPRequestHandler):
         token = re.sub(r'\s+', '', str(b.get('token') or ''))
         if token.lower().startswith('bearer'):
             token = token[6:]
+        if re.match(r'^(APP_USR|TEST)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-'
+                    r'[0-9a-f]{4}-[0-9a-f]{12}$', token, re.I):
+            return self._err(400, 'isso é a Public Key, não o Access Token — copie a linha '
+                                  '"Access Token" logo abaixo dela (é bem mais comprida)')
         if token and len(token) < 20:
             return self._err(400, 'esse token parece curto — copie o Access Token inteiro')
         if not token:
