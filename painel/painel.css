@@ -1047,5 +1047,12 @@ button { cursor: pointer; }
   .login-card { max-width: 380px; }
 
   .bc-card, .bc-log { max-width: 720px; }
+
+  /* blocos soltos abaixo do cartão da loja: não esticar de ponta a ponta */
+  #tab-loja > .field { max-width: 460px; }
+  #tab-loja > .two { max-width: 700px; }
+  #tab-loja > .fee-hint, #tab-loja > .sec-head p { max-width: 780px; }
+  #tab-loja > .banners { max-width: 900px; }
+  #tab-loja > .btn.small { justify-self: start; align-self: start; }
 }
 
