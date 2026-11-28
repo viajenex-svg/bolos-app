@@ -1506,9 +1506,12 @@
 
   function renderSuccessPix(order) {
     pixBlock($('#successPix'), $('#successPixQr'), $('#successPixCode'), order);
-    $('#successTitle').textContent =
-      (order.pix && !order.paid) ? 'Falta pagar o Pix' : 'Pedido confirmado!';
-    $('#successCancel').hidden = !!order.paid;
+    var unpaidPix = !!(order.pix && !order.paid);
+    $('#successTitle').textContent = unpaidPix ? 'Falta pagar o Pix' : 'Pedido confirmado!';
+    /* no Pix em aberto o cliente só paga, volta ou cancela — o rastreio
+       (e o Pix de novo lá dentro) ficaria repetindo a mesma coisa */
+    $('#successTrack').hidden = unpaidPix;
+    $('#successCancel').hidden = !!order.paid || intStatus(order) >= 2;
   }
 
   function renderTrackPix(order) {
@@ -2223,6 +2226,7 @@
 
   /* aplica um status vindo do servidor sem nunca voltar atrás */
   var successNum = '';
+  var pixGoTimer = null;
 
   function applyServerStatus(num, raw, info) {
     var o = orderByNum(num);
@@ -2235,6 +2239,17 @@
         if (successNum === String(num) && !$('#successSheet').hidden) {
           renderSuccessPix(o);
           toast('Pix recebido ✅');
+          /* pagou: a tela do Pix fecha sozinha e abre o acompanhamento */
+          clearTimeout(pixGoTimer);
+          pixGoTimer = setTimeout(function () {
+            if ($('#successSheet').hidden) return;
+            if (!orderByNum(num)) return;
+            closeSheets();
+            showTrack(num);
+          }, 1400);
+        } else if (successNum === String(num)) {
+          /* pagou já com a tela fechada: avisa sem arrastar o cliente de volta */
+          toast('Pix recebido ✅ Pedido #' + num + ' confirmado');
         }
       }
       if (current === 'track' && $('#trackNum').textContent === '#' + num) renderTrackPix(o);
