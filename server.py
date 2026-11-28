@@ -1285,6 +1285,7 @@ def mp_public(data):
 
 def _mp_call(method, path, token, body=None, key='', timeout=12):
     headers = {'Authorization': 'Bearer %s' % token,
+               'User-Agent': 'bolos-app/1.0',
                'Content-Type': 'application/json',
                'Accept': 'application/json'}
     if key:
@@ -1791,7 +1792,9 @@ class Handler(BaseHTTPRequestHandler):
             save(data)
             return self._json({'ok': True, 'mp': mp_public(data)})
 
-        token = str(b.get('token') or '').strip()
+        token = re.sub(r'\s+', '', str(b.get('token') or ''))
+        if token.lower().startswith('bearer'):
+            token = token[6:]
         if token and len(token) < 20:
             return self._err(400, 'esse token parece curto — copie o Access Token inteiro')
         if not token:
@@ -1801,14 +1804,25 @@ class Handler(BaseHTTPRequestHandler):
 
         account = str(old.get('account') or '')
         if token != str(old.get('token') or ''):
+            print('  MP: validando token de %d caracteres (%s...)' % (len(token), token[:8]), flush=True)
             try:
                 me = _mp_call('GET', '/users/me', token)
                 account = str(me.get('nickname') or me.get('email') or '')[:60]
             except urllib.error.HTTPError as e:
+                body = ''
+                try:
+                    body = e.read().decode('utf-8', 'replace')
+                except Exception:
+                    pass
+                print('  MP: token recusado (%s) %s' % (e.code, body[:300]), flush=True)
                 if e.code in (401, 403):
-                    return self._err(403, 'token recusado pelo Mercado Pago — confira e cole de novo')
+                    return self._err(403, 'Mercado Pago recusou o token (invalid access token). '
+                                          'Copie de novo o Access Token inteiro em Credenciais → '
+                                          'Credenciais de produção — ele tem uns 70 caracteres e '
+                                          'começa com APP_USR-.')
                 return self._err(502, 'não consegui falar com o Mercado Pago agora (tente de novo)')
-            except Exception:
+            except Exception as e:
+                print('  MP: falha de rede ao validar (%s)' % e, flush=True)
                 return self._err(502, 'não consegui falar com o Mercado Pago agora (tente de novo)')
 
         on = b.get('on')
