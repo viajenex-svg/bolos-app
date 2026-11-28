@@ -1031,7 +1031,9 @@
   function renderCheckout() {
     $('#coAddrTitle').textContent = store.addr.title;
     $('#coAddrText').textContent = store.addr.text;
-    $$('#coSummary .tline').forEach(function (n) { n.remove(); });
+    /* limpa tudo (itens, subtotal, entrega e total): só limpar .tline deixava
+       a linha do Total (classe .srow) acumulando a cada re-render */
+    $('#coSummary').innerHTML = '';
 
     var rows = store.cart.map(function (i) {
       return '<div class="tline"><span>' + i.qty + '× ' + esc(i.name) + '</span><b>' + brl(i.unit * i.qty) + '</b></div>';
@@ -1053,10 +1055,15 @@
     btn.disabled = DELIVERY.tooFar;
     btn.textContent = DELIVERY.tooFar ? 'Fora da área de entrega' : 'Confirmar pedido';
     var note = $('#coFeeNote');
-    note.hidden = !DELIVERY.tooFar;
-    note.textContent = DELIVERY.tooFar
-      ? 'Esse CEP fica fora da área de entrega. Troque o endereço para continuar.'
-      : '';
+    if (note.dataset.keep === '1') {
+      /* aviso de erro do último pedido: o refresh do cardápio não apaga */
+    } else if (DELIVERY.tooFar) {
+      note.hidden = false;
+      note.textContent = 'Esse CEP fica fora da área de entrega. Troque o endereço para continuar.';
+    } else {
+      note.hidden = true;
+      note.textContent = '';
+    }
 
     $$('#payList input[name="pay"]').forEach(function (r) {
       r.checked = r.value === store.pay;
@@ -1340,6 +1347,7 @@
 
   $('#addrCard').addEventListener('click', function () {
     openAddressSheet(function () {
+      $('#coFeeNote').dataset.keep = ''; /* trocou o endereço: limpa o aviso antigo */
       renderCheckout();
       openSheet($('#checkoutSheet'));
     });
@@ -1381,6 +1389,7 @@
     var prevNote = $('#coFeeNote');
     prevNote.hidden = true;
     prevNote.textContent = '';
+    prevNote.dataset.keep = '';
 
     var payload = {
       pay: store.pay,
@@ -1404,6 +1413,8 @@
       var note = $('#coFeeNote');
       note.hidden = false;
       note.textContent = msg;
+      note.dataset.keep = '1'; /* o refresh do cardápio não apaga mais este aviso */
+      try { note.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
       toast(msg);
     }
 
