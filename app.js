@@ -347,6 +347,9 @@
       renderPopular();
       renderMenu();
     }
+    /* botão de navegação dentro de uma folha (ex.: "Voltar ao início"
+       na tela do Pix) também fecha a folha */
+    if (el.closest('.sheet')) closeSheets();
     go(el.getAttribute('data-goto'));
   });
 
@@ -1510,8 +1513,11 @@
     $('#successTitle').textContent = unpaidPix ? 'Falta pagar o Pix' : 'Pedido confirmado!';
     /* no Pix em aberto o cliente só paga, volta ou cancela — o rastreio
        (e o Pix de novo lá dentro) ficaria repetindo a mesma coisa */
+    var canCancel = !order.paid && intStatus(order) < 2;
     $('#successTrack').hidden = unpaidPix;
-    $('#successCancel').hidden = !!order.paid || intStatus(order) >= 2;
+    $('#successCancel').hidden = !canCancel;
+    /* no Pix em aberto só paga ou cancela — "Voltar" fica como saída de reserva */
+    $('#successHome').hidden = unpaidPix && canCancel;
   }
 
   function renderTrackPix(order) {
