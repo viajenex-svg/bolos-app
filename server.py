@@ -1306,6 +1306,43 @@ def _mp_payer_email(data, num):
     return 'pedido%s@example.com' % num
 
 
+# conferência de reserva: se o webhook do MP atrasar, a consulta do pedido
+# também pergunta à API — no máximo uma vez a cada 8 s por pedido
+_mp_check = {}
+_mp_check_lock = threading.Lock()
+
+
+def mp_verify(data, order):
+    """Marca como pago se o MP já aprovou. Retorna True quando mudou."""
+    if order.get('paid') or not order.get('pix'):
+        return False
+    pid = str((order.get('pix') or {}).get('id') or '')
+    token = str(mp_cfg(data).get('token') or '')
+    if not pid or not token:
+        return False
+    now = time.time()
+    key = str(order.get('num'))
+    with _mp_check_lock:
+        last = _mp_check.get(key) or 0
+        if now - last < 8:
+            return False
+        if len(_mp_check) > 500:
+            _mp_check.clear()
+        _mp_check[key] = now
+    try:
+        pay = _mp_call('GET', '/v1/payments/%s' % quote(pid), token, timeout=6)
+    except Exception:
+        return False
+    if str(pay.get('status')) != 'approved':
+        return False
+    order['paid'] = True
+    order['paidAt'] = int(time.time())
+    order['paidVia'] = 'mp'
+    save(data)
+    print('  Pix pago (consulta): pedido %s' % order.get('num'), flush=True)
+    return True
+
+
 def mp_pix(data, order, base_url):
     """Cria a cobrança Pix na conta do token configurado no painel."""
     cfg = mp_cfg(data)
@@ -1966,6 +2003,7 @@ class Handler(BaseHTTPRequestHandler):
                       if str(x.get('num')) == num), None)
             if not o or not token or token != o.get('token'):
                 return self._err(404, 'pedido não encontrado')
+            mp_verify(data, o)
             return self._json({'ok': True, 'order': public_order(o)})
 
         m = re.match(r'^/api/order/([^/]+)/track$', path)

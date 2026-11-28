@@ -1454,6 +1454,7 @@
 
       closeSheets();
       $('#successNum').textContent = '#' + order.num;
+      successNum = String(order.num);
       renderSuccessPix(order);
       openSheet($('#successSheet'));
       $('#successTrack').onclick = function () {
@@ -2166,13 +2167,21 @@
   });
 
   /* aplica um status vindo do servidor sem nunca voltar atrás */
+  var successNum = '';
+
   function applyServerStatus(num, raw, info) {
     var o = orderByNum(num);
     if (!o) return;
     if (info && info.paid !== undefined && !!info.paid !== !!o.paid) {
       o.paid = !!info.paid;
-      if (o.paid) o.pix = null;
       save();
+      if (o.paid) {
+        o.pix = null;
+        if (successNum === String(num) && !$('#successSheet').hidden) {
+          renderSuccessPix(o);
+          toast('Pix recebido ✅');
+        }
+      }
       if (current === 'track' && $('#trackNum').textContent === '#' + num) renderTrackPix(o);
     }
     var st = Math.min(4, Math.max(1, Number(raw) || 1));
