@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#2B2118">
   <meta name="robots" content="noindex">
   <link rel="icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/painel/painel.css?v=20261128b">
+  <link rel="stylesheet" href="/painel/painel.css?v=20261128c">
 </head>
 <body>
 
@@ -450,9 +450,32 @@
   </div>
 </div>
 
+<!-- ============ MODAL PIX DA VENDA (PDV) ============ -->
+<div class="modal" id="pdvPixModal" hidden>
+  <div class="modal-card pdv-pix-card" role="dialog" aria-modal="true" aria-labelledby="pdvPixTitle">
+    <header class="modal-head">
+      <h2 id="pdvPixTitle">Pix</h2>
+      <button class="x" id="pdvPixX" type="button" aria-label="Fechar">✕</button>
+    </header>
+    <div class="pdv-pix-body">
+      <div class="pdv-pix-total" id="pdvPixTotal">R$ 0,00</div>
+      <img id="pdvPixQr" alt="QR Code do Pix">
+      <textarea id="pdvPixCode" readonly rows="3" aria-label="Código Pix copia e cola"></textarea>
+      <p class="pdv-pix-status" id="pdvPixStatus">Aguardando o pagamento…</p>
+      <small class="hint">O QR é do Mercado Pago. A venda fecha sozinha quando o Pix cai.</small>
+    </div>
+    <footer class="modal-foot pdv-pix-actions">
+      <button class="btn ghost small" id="pdvPixCopy" type="button">Copiar código</button>
+      <span class="sp"></span>
+      <button class="btn danger ghost small" id="pdvPixCancel" type="button">Cancelar venda</button>
+      <button class="btn solid small" id="pdvPixPaid" type="button">Confirmar recebimento</button>
+    </footer>
+  </div>
+</div>
+
 <div class="toast-p" id="toastP" role="status" aria-live="polite"></div>
 
-<script src="/painel/painel.js?v=20261128b"></script>
+<script src="/painel/painel.js?v=20261128c"></script>
 </body>
 <!-- painel desktop build 2 (2026-11-28) -->
 </html>

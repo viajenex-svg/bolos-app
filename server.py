@@ -1352,6 +1352,8 @@ def mp_verify(data, order, force=False):
     order['paid'] = True
     order['paidAt'] = int(time.time())
     order['paidVia'] = 'mp'
+    if order.get('channel') == 'pdv':
+        order['status'] = 4          # venda de balcão: o Pix é o último passo
     save(data)
     print('  Pix pago (consulta): pedido %s' % order.get('num'), flush=True)
     _push_pix_paid(data, order)
@@ -1954,6 +1956,8 @@ class Handler(BaseHTTPRequestHandler):
                 o['paid'] = True
                 o['paidAt'] = int(time.time())
                 o['paidVia'] = 'mp'
+                if o.get('channel') == 'pdv':
+                    o['status'] = 4
                 save(data)
                 print('  Pix pago: pedido %s' % o.get('num'), flush=True)
                 _push_pix_paid(data, o)
@@ -2132,6 +2136,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(calc_fee(data, cep))
             return self._err(404, 'rota não encontrada')
 
+        m = re.match(r'^/api/admin/pdv/([\w-]+)$', path)
+        if m:
+            if not self._need_auth():
+                return
+            return self._pdv_info(unquote(m.group(1)), query)
+
         if path == '/api/admin/all':
             if not self._need_auth():
                 return
@@ -2291,6 +2301,14 @@ class Handler(BaseHTTPRequestHandler):
             if not self._need_auth():
                 return
             return self._create_pdv_sale(self._body())
+
+        m = re.match(r'^/api/admin/pdv/([\w-]+)/(paid|cancel)$', path)
+        if m:
+            if not self._need_auth():
+                return
+            if m.group(2) == 'paid':
+                return self._pdv_mark_paid(unquote(m.group(1)))
+            return self._pdv_cancel(unquote(m.group(1)))
 
         if path == '/api/admin/mp':
             if not self._need_auth():
@@ -2914,11 +2932,7 @@ class Handler(BaseHTTPRequestHandler):
             disc = subtotal * min(100.0, disc) / 100.0
         disc = min(subtotal, round(disc, 2))
         total = round(subtotal - disc, 2)
-
-        for it in clean:
-            p = prods[it['pid']]
-            if p.get('stock') is not None:
-                p['stock'] = max(0, p['stock'] - it['qty'])
+        pay = str(b.get('pay') or 'cash')[:20]
 
         nums = [int(o.get('num', 0)) for o in data['orders'] if str(o.get('num', '')).isdigit()]
         num = (max(nums) + 1) if nums else 1001
@@ -2930,7 +2944,7 @@ class Handler(BaseHTTPRequestHandler):
             'discount': round(disc, 2),
             'fee': 0.0,
             'total': total,
-            'pay': str(b.get('pay') or 'cash')[:20],
+            'pay': pay,
             'name': str(b.get('name') or 'Balcão')[:60],
             'phone': '',
             'token': uuid.uuid4().hex[:16],
@@ -2943,16 +2957,82 @@ class Handler(BaseHTTPRequestHandler):
             'addr': 'Balcão',
             'time': time.strftime('%H:%M'),
             'createdAt': int(time.time()),
-            'status': 4,
-            'paid': True,
-            'paidVia': 'pdv',
+            'status': 4 if pay != 'pix' else 1,
+            'paid': pay != 'pix',
             'channel': 'pdv',
             'note': str(b.get('note') or '')[:200]
         }
+        if pay != 'pix':
+            order['paidVia'] = 'pdv'
+        else:
+            # QR do Mercado Pago: a venda só fecha quando o pagamento cai.
+            # Sem MP configurado é melhor recusar do que registrar fiado.
+            pix = mp_pix(data, order, self._base_url())
+            if not pix:
+                return self._err(409, 'Pix indisponível agora (Mercado Pago não configurado). '
+                                      'Use cartão ou dinheiro.')
+            order['pix'] = pix
+
+        for it in clean:
+            p = prods[it['pid']]
+            if p.get('stock') is not None:
+                p['stock'] = max(0, p['stock'] - it['qty'])
+
         data['orders'].insert(0, order)
         data['orders'] = data['orders'][:300]
         save(data)
         return self._json({'ok': True, 'order': order})
+
+    def _pdv_find(self, data, num):
+        return next((x for x in data.get('orders', [])
+                     if str(x.get('num')) == str(num) and x.get('channel') == 'pdv'), None)
+
+    def _pdv_info(self, num, query):
+        """Painel consulta a venda de balcão enquanto o QR está na tela."""
+        data = load()
+        o = self._pdv_find(data, num)
+        if not o:
+            return self._err(404, 'venda não encontrada')
+        mp_verify(data, o)          # throttle de 8 s; o webhook também confirma
+        out = {'ok': True, 'paid': bool(o.get('paid')),
+               'status': int(o.get('status') or 1)}
+        if (query.get('qr') or [''])[0] == '1':
+            out['order'] = o    # inclui o QR em base64, só para o painel autenticado
+        return self._json(out)
+
+    def _pdv_mark_paid(self, num):
+        """Operador viu o Pix cair antes do webhook: confirma na mão."""
+        data = load()
+        o = self._pdv_find(data, num)
+        if not o:
+            return self._err(404, 'venda não encontrada')
+        if not o.get('paid'):
+            o['paid'] = True
+            o['paidAt'] = int(time.time())
+            o['paidVia'] = 'manual'
+            o['status'] = 4
+            save(data)
+            print('  Venda %s: Pix confirmado pelo painel' % num, flush=True)
+        return self._json({'ok': True, 'order': o})
+
+    def _pdv_cancel(self, num):
+        """Desistiu do Pix no balcão: devolve o estoque e apaga a venda."""
+        data = load()
+        o = self._pdv_find(data, num)
+        if not o:
+            return self._err(404, 'venda não encontrada')
+        mp_verify(data, o, force=True)   # nunca apagar venda paga
+        if o.get('paid'):
+            return self._err(409, 'o Pix já foi pago — não dá para cancelar')
+        prods = {p['id']: p for p in data.get('products', [])}
+        for it in o.get('items') or []:
+            p = prods.get(it.get('pid'))
+            if p and p.get('stock') is not None:
+                p['stock'] = int(p['stock']) + int(it.get('qty') or 0)
+        data['orders'] = [x for x in data['orders'] if x is not o]
+        save(data)
+        print('  Venda %s cancelada no balcão' % num, flush=True)
+        return self._json({'ok': True})
 
     # ---------- motoboy ----------
 

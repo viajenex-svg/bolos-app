@@ -618,7 +618,10 @@
           '<button type="button" class="mb-copy" data-copy="' + esc(mbHref) + '">Copiar link</button>' +
           '</div>' : '') +
         '<div class="status-btns">' + btns +
-          (isPdv ? '<span class="pdv-done">✓ Venda concluída</span>' : '') +
+          (isPdv && st === 4 ? '<span class="pdv-done">✓ Venda concluída</span>' : '') +
+          (isPdv && !o.paid
+            ? '<button type="button" class="order-pix-qr" data-pdvpix="' + esc(o.num) + '">Mostrar QR do Pix</button>'
+            : '') +
           '<button type="button" class="order-del" data-odel aria-label="Apagar pedido">🗑 Apagar</button>' +
         '</div>' +
         '</article>';
@@ -1487,7 +1490,13 @@
         name: $('#pdvClient').value.trim()
       }
     }).then(function (d) {
-      toast('Venda #' + d.order.num + ' registrada · ' + money(d.order.total));
+      var o = d.order || {};
+      if (o.pay === 'pix' && o.pix) {
+        openPdvPix(o);
+        toast('Venda #' + o.num + ' aguardando o Pix');
+      } else {
+        toast('Venda #' + o.num + ' registrada · ' + money(o.total));
+      }
       pdv.cart = [];
       $('#pdvDisc').value = '';
       $('#pdvClient').value = '';
@@ -1499,6 +1508,110 @@
       renderPdvCart();
     });
   }
+
+  /* ---- Pix no balcão: mostra o QR e espera o pagamento cair ---- */
+
+  var pdvPix = null;   /* { num, timer } enquanto o modal está aberto */
+
+  function openPdvPix(order) {
+    if (!order || !order.pix) return;
+    closePdvPix(true);
+    pdvPix = { num: String(order.num), timer: null };
+    $('#pdvPixTitle').textContent = 'Pix · venda #' + order.num;
+    $('#pdvPixTotal').textContent = money(order.total);
+    var qr = order.pix.qr || '';
+    var img = $('#pdvPixQr');
+    img.hidden = !qr;
+    img.src = qr ? 'data:image/png;base64,' + qr : '';
+    $('#pdvPixCode').value = order.pix.copy || '';
+    $('#pdvPixStatus').textContent = 'Aguardando o pagamento…';
+    $('#pdvPixStatus').classList.remove('ok');
+    $('#pdvPixPaid').disabled = false;
+    $('#pdvPixCancel').disabled = false;
+    $('#pdvPixModal').hidden = false;
+    pollPdvPix();
+  }
+
+  function closePdvPix(keepStatus) {
+    if (pdvPix && pdvPix.timer) clearTimeout(pdvPix.timer);
+    pdvPix = null;
+    $('#pdvPixModal').hidden = true;
+    if (!keepStatus) renderOrders();
+  }
+
+  function markPdvPixPaid(num) {
+    if (!pdvPix) return;
+    clearTimeout(pdvPix.timer);
+    $('#pdvPixStatus').textContent = 'Pix recebido ✅ Venda concluída';
+    $('#pdvPixStatus').classList.add('ok');
+    $('#pdvPixPaid').disabled = true;
+    $('#pdvPixCancel').disabled = true;
+    if (navigator.vibrate) navigator.vibrate([120, 80, 120]);
+    toast('Pix recebido · venda #' + num + ' concluída');
+    setTimeout(function () {
+      closePdvPix();
+      loadAll();
+    }, 1200);
+  }
+
+  function pollPdvPix() {
+    if (!pdvPix) return;
+    var cur = pdvPix;
+    api('/api/admin/pdv/' + encodeURIComponent(cur.num)).then(function (d) {
+      if (!pdvPix || pdvPix !== cur) return;
+      if (d.paid) { markPdvPixPaid(cur.num); return; }
+    }).catch(function () { /* sem rede: tenta de novo */ }).then(function () {
+      if (!pdvPix || pdvPix !== cur) return;
+      if ($('#pdvPixStatus').classList.contains('ok')) return;
+      cur.timer = setTimeout(pollPdvPix, 3000);
+    });
+  }
+
+  $('#pdvPixX').addEventListener('click', function () { closePdvPix(); });
+  $('#pdvPixModal').addEventListener('click', function (e) {
+    if (e.target === this) closePdvPix();
+  });
+
+  $('#pdvPixCopy').addEventListener('click', function () {
+    var code = $('#pdvPixCode').value;
+    copyText(code).then(function () {
+      toast('Código Pix copiado');
+    }).catch(function () {
+      $('#pdvPixCode').select();
+      toast('Selecione e copie o código');
+    });
+  });
+
+  $('#pdvPixPaid').addEventListener('click', function () {
+    if (!pdvPix) return;
+    if (!window.confirm('Confirmar que o Pix da venda #' + pdvPix.num + ' foi recebido?')) return;
+    var btn = this;
+    btn.disabled = true;
+    api('/api/admin/pdv/' + encodeURIComponent(pdvPix.num) + '/paid', { method: 'POST' })
+      .then(function () { markPdvPixPaid(pdvPix ? pdvPix.num : ''); })
+      .catch(function (e) {
+        btn.disabled = false;
+        toast('Erro: ' + e.message);
+      });
+  });
+
+  $('#pdvPixCancel').addEventListener('click', function () {
+    if (!pdvPix) return;
+    var num = pdvPix.num;
+    if (!window.confirm('Cancelar a venda #' + num + '? O estoque volta e o Pix é descartado.')) return;
+    var btn = this;
+    btn.disabled = true;
+    api('/api/admin/pdv/' + encodeURIComponent(num) + '/cancel', { method: 'POST' })
+      .then(function () {
+        closePdvPix(true);
+        toast('Venda #' + num + ' cancelada');
+        loadAll();
+      })
+      .catch(function (e) {
+        btn.disabled = false;
+        toast('Erro: ' + e.message);
+      });
+  });
 
   $('#pdvSearch').addEventListener('input', function () {
     pdv.search = this.value;
@@ -1994,6 +2107,28 @@
   }
 
   $('#ordersList').addEventListener('click', function (e) {
+    var qrBtn = e.target.closest('[data-pdvpix]');
+    if (qrBtn) {
+      var qnum = qrBtn.dataset.pdvpix;
+      qrBtn.disabled = true;
+      api('/api/admin/pdv/' + encodeURIComponent(qnum) + '?qr=1')
+        .then(function (d) {
+          qrBtn.disabled = false;
+          if (d.paid) {
+            toast('Essa venda já foi paga');
+            loadAll();
+            return;
+          }
+          if (!d.order) { toast('Não consegui carregar o QR'); return; }
+          openPdvPix(d.order);
+        })
+        .catch(function (err) {
+          qrBtn.disabled = false;
+          toast(err.message);
+        });
+      return;
+    }
+
     var copyBtn = e.target.closest('[data-copy]');
     if (copyBtn) {
       copyText(copyBtn.dataset.copy)

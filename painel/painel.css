@@ -1236,3 +1236,52 @@ button { cursor: pointer; }
 .mp-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .paid-tag { color: var(--green); font-weight: 600; }
 .pix-tag { color: var(--accent); font-weight: 600; }
+
+/* ---------------- Pix na venda do balcão (PDV) ---------------- */
+
+.order-pix-qr {
+  border: 1px solid #f0d3bd;
+  background: var(--accent-bg, #fdf1e8);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.order-pix-qr:hover { background: #fbe4d3; }
+
+.pdv-pix-card { max-width: 420px; }
+.pdv-pix-body { text-align: center; }
+.pdv-pix-total {
+  font-family: var(--serif);
+  font-size: 26px;
+  margin: 2px 0 12px;
+}
+.pdv-pix-body img {
+  display: block;
+  width: 220px;
+  max-width: 100%;
+  margin: 0 auto 12px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+.pdv-pix-body img[hidden] { display: none; }
+#pdvPixCode {
+  width: 100%;
+  resize: none;
+  font: 12px/1.5 ui-monospace, monospace;
+  color: var(--ink-2);
+  background: #fbf6ef;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+}
+.pdv-pix-status {
+  margin: 12px 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.pdv-pix-status.ok { color: var(--green); }
+.pdv-pix-actions { flex-wrap: wrap; }
