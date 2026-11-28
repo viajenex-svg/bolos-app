@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#2B2118">
   <meta name="robots" content="noindex">
   <link rel="icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/painel/painel.css?v=30">
+  <link rel="stylesheet" href="/painel/painel.css?v=31">
 </head>
 <body>
 
@@ -23,7 +23,21 @@
     </label>
     <button class="btn solid block" type="submit">Entrar</button>
     <p class="login-err" id="loginErr" hidden>PIN incorreto. Tente de novo.</p>
-    <small class="login-foot">PIN definido pelo administrador (variável <code>SC_PIN</code>).</small>
+    <button class="login-link" id="forgotOpen" type="button">Esqueci o PIN</button>
+    <small class="login-foot">PIN definido no painel (aba Loja → Segurança).</small>
+  </form>
+
+  <form class="login-card" id="forgotForm" autocomplete="off" hidden>
+    <h1>Recuperar PIN</h1>
+    <p>Digite o e-mail de recuperação cadastrado no painel. Enviamos o PIN para ele.</p>
+    <label class="field">
+      <span>E-mail cadastrado</span>
+      <input id="forgotEmail" type="email" placeholder="seuemail@gmail.com" maxlength="120" autocomplete="email" required>
+    </label>
+    <button class="btn solid block" type="submit">Enviar PIN por e-mail</button>
+    <p class="login-err" id="forgotErr" hidden></p>
+    <p class="login-ok" id="forgotOk" hidden>Se o e-mail confere, o PIN foi enviado. Confira a caixa de entrada.</p>
+    <button class="login-link" id="forgotBack" type="button">← Voltar para o login</button>
   </form>
 </div>
 
@@ -279,6 +293,18 @@
       <div class="coupons" id="couponList"></div>
       <button class="btn ghost small" id="addCoupon" type="button">+ Adicionar cupom</button>
 
+      <h3 class="sub">Segurança</h3>
+      <p class="fee-hint">O PIN abre este painel. O e-mail abaixo é usado no “Esqueci o PIN” da tela de login — coloque um e-mail que você acessa.</p>
+      <label class="field"><span>E-mail de recuperação</span><input id="stEmail" type="email" maxlength="120" placeholder="seuemail@gmail.com"></label>
+
+      <h3 class="sub" style="margin-top:6px">Trocar o PIN</h3>
+      <div class="two">
+        <label class="field"><span>PIN atual</span><input id="pinCur" type="password" maxlength="32" autocomplete="current-password"></label>
+        <label class="field"><span>Novo PIN (4 a 32 caracteres)</span><input id="pinNew" type="password" maxlength="32" autocomplete="new-password"></label>
+      </div>
+      <button class="btn ghost small" id="changePin" type="button">Trocar PIN</button>
+      <p class="fee-hint" id="pinHint" hidden></p>
+
       <div class="save-bar">
         <button class="btn solid" id="saveStore" type="button">Salvar loja</button>
       </div>
@@ -344,6 +370,6 @@
 
 <div class="toast-p" id="toastP" role="status" aria-live="polite"></div>
 
-<script src="/painel/painel.js?v=35"></script>
+<script src="/painel/painel.js?v=36"></script>
 </body>
 </html>

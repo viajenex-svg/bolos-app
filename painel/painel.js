@@ -317,11 +317,77 @@
     }).catch(function (e) {
       err.hidden = false;
       err.textContent = e.status === 401
-        ? 'PIN incorreto. O padrão é 1234.'
+        ? 'PIN incorreto. Tente de novo ou use “Esqueci o PIN”.'
         : 'Não consegui falar com o servidor (HTTP ' + (e.status || 'sem conexão') +
           '). Abra o painel em http://' + location.hostname + ':8001/painel';
       $('#pinInput').select();
     });
+  });
+
+  function showForgot(on) {
+    $('#loginForm').hidden = on;
+    $('#forgotForm').hidden = !on;
+    $('#forgotErr').hidden = true;
+    $('#forgotOk').hidden = true;
+    setTimeout(function () { (on ? $('#forgotEmail') : $('#pinInput')).focus(); }, 50);
+  }
+
+  $('#forgotOpen').addEventListener('click', function () { showForgot(true); });
+  $('#forgotBack').addEventListener('click', function () { showForgot(false); });
+
+  $('#forgotForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var err = $('#forgotErr');
+    var ok = $('#forgotOk');
+    err.hidden = true;
+    ok.hidden = true;
+    fetch('/api/pin/forgot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: $('#forgotEmail').value.trim() }),
+      cache: 'no-store'
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) {
+        if (!r.ok) {
+          var e2 = new Error(d.error || ('erro ' + r.status));
+          e2.status = r.status;
+          throw e2;
+        }
+        return d;
+      });
+    }).then(function () {
+      ok.hidden = false;
+    }).catch(function (e2) {
+      err.hidden = false;
+      err.textContent = e2.message || 'Não consegui enviar o e-mail agora';
+    });
+  });
+
+  $('#changePin').addEventListener('click', function () {
+    var hint = $('#pinHint');
+    var cur = $('#pinCur').value;
+    var nw = $('#pinNew').value.trim();
+    hint.hidden = true;
+    if (!cur || !nw) {
+      hint.hidden = false;
+      hint.textContent = 'Preencha o PIN atual e o novo PIN.';
+      return;
+    }
+    var btn = $('#changePin');
+    btn.disabled = true;
+    api('/api/admin/pin', { method: 'POST', body: { current: cur, new: nw } })
+      .then(function () {
+        pin = nw;
+        localStorage.setItem(PIN_KEY, pin);
+        $('#pinCur').value = '';
+        $('#pinNew').value = '';
+        hint.hidden = false;
+        hint.textContent = 'PIN trocado. Use o novo PIN no próximo login.';
+        toast('PIN atualizado');
+      }).catch(function (e) {
+        hint.hidden = false;
+        hint.textContent = e.message || 'Não consegui trocar o PIN';
+      }).then(function () { btn.disabled = false; });
   });
 
   window.addEventListener('error', function () {
@@ -565,6 +631,7 @@
     $('#stWa').value = s.whatsapp || '';
     $('#stHours').value = s.hours || '';
     $('#stAddr').value = s.address || '';
+    $('#stEmail').value = s.email || '';
     $('#stOriginCep').value = s.originCep || '';
     $('#stMode').value = d.mode;
     $('#stBase').value = d.base;
@@ -1656,6 +1723,7 @@
       hoursAuto: $('#stHoursAuto').checked,
       schedule: readSchedule(),
       address: $('#stAddr').value.trim(),
+      email: $('#stEmail').value.trim(),
       originCep: originCep,
       delivery: {
         mode: mode,

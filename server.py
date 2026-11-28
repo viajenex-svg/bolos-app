@@ -15,11 +15,13 @@ import json
 import math
 import os
 import re
+import smtplib
 import threading
 import time
 import urllib.error
 import urllib.request
 import uuid
+from email.message import EmailMessage
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse
 
@@ -41,9 +43,19 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(BASE, 'data.json')
 UPLOAD_DIR = os.path.join(BASE, 'uploads')
 ICON_DIR = os.path.join(BASE, 'icons')
-PIN = os.environ.get('SC_PIN', '1234')
+PIN = os.environ.get('SC_PIN', '1234')   # PIN inicial de um banco novo; o atual fica no banco
 PORT = int(os.environ.get('SC_PORT') or os.environ.get('PORT') or '8002')
 LOCK = threading.RLock()
+
+# envio do PIN por e-mail ("Esqueci o PIN" no painel). Configure no servidor:
+#   SMTP_HOST, SMTP_PORT (587/465), SMTP_USER, SMTP_PASS, SMTP_FROM (opcional)
+# SMTP_SECURE=1 usa SSL direto (porta 465); senão STARTTLS.
+SMTP_HOST = os.environ.get('SMTP_HOST', '').strip()
+SMTP_PORT = int(os.environ.get('SMTP_PORT') or '587')
+SMTP_USER = os.environ.get('SMTP_USER', '').strip()
+SMTP_PASS = os.environ.get('SMTP_PASS', '')
+SMTP_FROM = os.environ.get('SMTP_FROM', '').strip() or SMTP_USER
+SMTP_SECURE = os.environ.get('SMTP_SECURE', '').strip().lower() in ('1', 'true', 'sim')
 
 MAX_BODY = 8 * 1024 * 1024      # 8 MB
 MAX_UPLOAD = 4 * 1024 * 1024    # 4 MB de imagem
@@ -486,12 +498,66 @@ def load():
             except Exception:
                 data = json.loads(json.dumps(DEFAULT))
         data.setdefault('store', {})
+        data.setdefault('admin', {})       # PIN atual e ajustes de segurança
         data.setdefault('products', [])
         data.setdefault('orders', [])
         data.setdefault('admin_push_subs', [])   # aparelhos do painel avisados de pedidos novos
         data.setdefault('broadcast_subs', [])    # aparelhos de clientes que aceitaram avisos
         data.setdefault('broadcast_log', [])     # últimos avisos enviados pelo painel
         return data
+
+
+# --- PIN do painel ------------------------------------------------------
+# O PIN fica no banco (data['admin']['pin']) e pode ser trocado pelo painel
+# sem reiniciar. SC_PIN só vale como valor inicial quando o banco ainda não
+# tem PIN gravado.
+_PIN_STATE = {'pin': None, 'ts': 0.0}
+_PIN_STATE_LOCK = threading.Lock()
+_PIN_TTL = 60                   # relê do banco a cada 1 min (Fly e Render dividem o banco)
+
+
+def current_pin():
+    with _PIN_STATE_LOCK:
+        now = time.time()
+        if _PIN_STATE['pin'] is None or now - _PIN_STATE['ts'] > _PIN_TTL:
+            try:
+                pin = str((load().get('admin') or {}).get('pin') or '') or PIN
+            except Exception:
+                pin = _PIN_STATE['pin'] or PIN
+            _PIN_STATE['pin'] = pin
+            _PIN_STATE['ts'] = now
+        return _PIN_STATE['pin']
+
+
+def set_pin(new):
+    data = load()
+    data.setdefault('admin', {})['pin'] = str(new)
+    save(data)
+    with _PIN_STATE_LOCK:
+        _PIN_STATE['pin'] = str(new)
+        _PIN_STATE['ts'] = time.time()
+
+
+def smtp_ready():
+    return bool(SMTP_HOST and SMTP_FROM)
+
+
+def send_mail(to, subject, text):
+    """Envia e-mail simples pelo SMTP configurado. Levanta exceção se falhar."""
+    if not smtp_ready():
+        raise RuntimeError('SMTP não configurado')
+    msg = EmailMessage()
+    msg['From'] = SMTP_FROM
+    msg['To'] = to
+    msg['Subject'] = subject
+    msg.set_content(text)
+    cls = smtplib.SMTP_SSL if SMTP_SECURE else smtplib.SMTP
+    with cls(SMTP_HOST, SMTP_PORT, timeout=20) as s:
+        if not SMTP_SECURE:
+            s.starttls()
+        if SMTP_USER:
+            s.login(SMTP_USER, SMTP_PASS)
+        s.send_message(msg)
 
 
 def public_menu(data):
@@ -909,7 +975,7 @@ def pin_ok(ip, pin):
         _PIN_FAIL[ip] = fails
         if len(fails) >= 10:
             return False
-    ok = hmac.compare_digest(str(pin or ''), PIN)
+    ok = hmac.compare_digest(str(pin or ''), current_pin())
     with _PIN_LOCK:
         if not ok:
             _PIN_FAIL.setdefault(ip, []).append(now)
@@ -1568,7 +1634,7 @@ class Handler(BaseHTTPRequestHandler):
         self._json({'error': msg}, code)
 
     def _auth(self):
-        return hmac.compare_digest(str(self.headers.get('X-Pin', '')), PIN)
+        return hmac.compare_digest(str(self.headers.get('X-Pin', '')), current_pin())
 
     def _need_auth(self):
         if not self._auth():
@@ -1588,6 +1654,42 @@ class Handler(BaseHTTPRequestHandler):
             return json.loads(raw.decode('utf-8'))
         except Exception:
             return {}
+
+    def _change_pin(self, b):
+        cur = str(b.get('current') or '')
+        new = str(b.get('new') or '').strip()
+        if not hmac.compare_digest(cur, current_pin()):
+            return self._err(403, 'PIN atual incorreto')
+        if not 4 <= len(new) <= 32 or re.search(r'\s', new):
+            return self._err(400, 'o novo PIN precisa ter de 4 a 32 caracteres, sem espaços')
+        set_pin(new)
+        return self._json({'ok': True})
+
+    def _forgot_pin(self, b):
+        ip = self.client_address[0]
+        if not rate_ok('forgot:%s' % ip, 3, 3600):
+            return self._err(429, 'muitas tentativas, aguarde uma hora')
+        email = str(b.get('email') or '').strip().lower()[:120]
+        data = load()
+        target = str((data.get('store') or {}).get('email') or '').strip().lower()
+        if not target:
+            return self._err(409, 'nenhum e-mail de recuperação cadastrado no painel')
+        if not smtp_ready():
+            return self._err(503, 'envio de e-mail não configurado no servidor')
+        if not email or email != target:
+            # resposta genérica: não revela qual e-mail está cadastrado
+            return self._json({'ok': True})
+        store_name = str((data.get('store') or {}).get('name') or 'sua loja')
+        try:
+            send_mail(target,
+                      'PIN do painel — %s' % store_name,
+                      'Olá!\n\nO PIN de administrador de %s é: %s\n\n'
+                      'Se não foi você quem pediu, entre no painel e troque o PIN '
+                      '(aba Loja → Segurança).\n' % (store_name, current_pin()))
+        except Exception as e:
+            print('  aviso: falha ao enviar o PIN por e-mail (%s)' % e, flush=True)
+            return self._err(502, 'não consegui enviar o e-mail agora; tente mais tarde')
+        return self._json({'ok': True})
 
     # ---------- GET ----------
 
@@ -1746,6 +1848,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             data = dict(data)
             data.pop('push_cfg', None)      # a chave privada VAPID nunca sai daqui
+            data.pop('admin', None)         # o PIN nunca sai daqui
             data['pushDevices'] = len(data.pop('admin_push_subs', None) or [])
             data['appDevices'] = len(_all_app_subs(data))
             data.pop('broadcast_subs', None)
@@ -1773,6 +1876,7 @@ class Handler(BaseHTTPRequestHandler):
             # artefato público do GitHub e ninguém deve poder enviar push
             safe = json.loads(json.dumps(data, ensure_ascii=False))
             safe.pop('push_cfg', None)
+            safe.pop('admin', None)          # backup público não leva o PIN
             safe.pop('admin_push_subs', None)
             safe.pop('broadcast_subs', None)
             for o in safe.get('orders', []):
@@ -1877,6 +1981,14 @@ class Handler(BaseHTTPRequestHandler):
             if pin_ok(self.client_address[0], b.get('pin')):
                 return self._json({'ok': True})
             return self._err(401, 'PIN incorreto')
+
+        if path == '/api/pin/forgot':
+            return self._forgot_pin(self._body())
+
+        if path == '/api/admin/pin':
+            if not self._need_auth():
+                return
+            return self._change_pin(self._body())
 
         if path == '/api/push/subscribe':
             return self._app_push_subscribe()
@@ -2107,6 +2219,9 @@ class Handler(BaseHTTPRequestHandler):
         for k in ('name', 'tagline', 'logo', 'whatsapp', 'hours', 'address'):
             if k in b:
                 st[k] = str(b[k])[:200]
+        if 'email' in b:
+            em = str(b['email'] or '').strip().lower()[:120]
+            st['email'] = em if re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', em) else ''
         for k in ('fee', 'minOrder'):
             if k in b:
                 try:
@@ -2496,7 +2611,7 @@ def main():
     print('  🍰  Delícias do Aleff')
     print('  App ....... http://localhost:%d/' % PORT)
     print('  Painel .... http://localhost:%d/painel' % PORT)
-    print('  PIN ....... %s' % PIN)
+    print('  PIN ....... %s' % (current_pin() if not DB_MODE else 'definido no painel'))
     print('  Dados ..... %s' % ('Neon/Postgres' if DB_MODE else DATA_PATH))
     print('')
     try:
