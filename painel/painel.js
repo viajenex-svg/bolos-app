@@ -17,6 +17,14 @@
   var stockTimers = {};
   var cashPeriod = 'today';
 
+  /* aviso de pedido novo (som + título + push) */
+  var knownOrderNums = null;
+  var ordersSeen = false;
+  var panelPushActive = false;
+  var pushBtnBusy = false;
+  var titleTimer = null;
+  var TITLE_BASE = 'Painel — Delícias do Aleff · Bolos';
+
   var DEFAULT_CATS = [
     { id: 'bolos', label: 'Bolos', short: '' },
     { id: 'fatias', label: 'Fatias', short: '' },
@@ -107,6 +115,193 @@
     });
   }
 
+  // ---------------------------------------------------------------- aviso de pedido novo
+
+  /* iOS/Safari só libera áudio dentro de um toque: destrava no 1º gesto */
+  var panelAC = null;
+  function unlockPanelAudio() {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!panelAC) panelAC = new AC();
+      if (panelAC.state === 'suspended') panelAC.resume();
+    } catch (e) { /* sem áudio */ }
+  }
+  ['touchstart', 'pointerdown', 'keydown', 'click'].forEach(function (ev) {
+    document.addEventListener(ev, unlockPanelAudio, { once: true, passive: true });
+  });
+
+  function chirpPanel() {
+    /* mesmo ding-dong duplo do app do cliente */
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!panelAC) panelAC = new AC();
+      var ac = panelAC;
+      if (ac.state === 'suspended') ac.resume();
+      var notes = [[0, 784], [0.5, 659], [1.15, 784], [1.65, 659]];
+      notes.forEach(function (n) {
+        var t = ac.currentTime + n[0];
+        [1, 2.02].forEach(function (mult, h) {
+          var o = ac.createOscillator();
+          var g = ac.createGain();
+          o.type = 'sine';
+          o.frequency.value = n[1] * mult;
+          var peak = h ? 0.05 : 0.24;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(peak, t + 0.015);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+          o.connect(g);
+          g.connect(ac.destination);
+          o.start(t);
+          o.stop(t + 0.95);
+        });
+      });
+    } catch (e) { /* sem áudio: só vibra */ }
+  }
+
+  function flashTitle(n) {
+    clearInterval(titleTimer);
+    var on = false;
+    titleTimer = setInterval(function () {
+      document.title = on ? TITLE_BASE : '(' + n + ') Novo pedido!';
+      on = !on;
+    }, 1000);
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && titleTimer) {
+      clearInterval(titleTimer);
+      titleTimer = null;
+      document.title = TITLE_BASE;
+    }
+  });
+
+  /* compara a lista com a anterior; devolve os pedidos que não existiam */
+  function syncOrders(list) {
+    var nums = {};
+    (list || []).forEach(function (o) { nums[String(o.num)] = true; });
+    var fresh = [];
+    if (ordersSeen) {
+      fresh = (list || []).filter(function (o) { return !knownOrderNums[String(o.num)]; });
+    }
+    knownOrderNums = nums;
+    ordersSeen = true;
+    return fresh;
+  }
+
+  function alertNewOrders(fresh) {
+    if (!fresh.length) return;
+    chirpPanel();
+    if (navigator.vibrate) navigator.vibrate([180, 90, 180]);
+    var first = fresh[0];
+    var extra = fresh.length > 1 ? ' (+' + (fresh.length - 1) + ')' : '';
+    toast('Novo pedido #' + first.num + extra + ' 🧾');
+    flashTitle(fresh.length);
+    /* sem push inscrito, avisa pela própria página quando ela está em segundo plano */
+    if (!panelPushActive && document.hidden &&
+        'Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification('Novo pedido #' + first.num, {
+          body: 'Abra o painel para ver os detalhes.',
+          icon: '/icons/icon-192.png',
+          tag: 'admin-order-' + first.num
+        });
+      } catch (e) { /* sem aviso do sistema */ }
+    }
+  }
+
+  // ---------------------------------------------------------------- push do painel
+
+  function panelIsIOS() { return /iPad|iPhone|iPod/.test(navigator.userAgent); }
+  function panelStandalone() {
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+           navigator.standalone === true;
+  }
+  function panelPushSupported() {
+    return ('Notification' in window) && ('serviceWorker' in navigator) &&
+           ('PushManager' in window) && window.isSecureContext;
+  }
+  function b64ToBytes(b64) {
+    var s = String(b64).replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    var raw = atob(s);
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  function panelPushKey() {
+    return fetch('/api/push/key', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { return j && j.key; });
+  }
+  function subscribePanelPush() {
+    return panelPushKey().then(function (key) {
+      if (!key) throw new Error('sem-chave');
+      return navigator.serviceWorker.register('/sw.js', { scope: '/' })
+        .then(function () { return navigator.serviceWorker.ready; })
+        .then(function (reg) {
+          return reg.pushManager.getSubscription().then(function (sub) {
+            if (sub) return sub;
+            return reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: b64ToBytes(key)
+            });
+          });
+        });
+    }).then(function (sub) {
+      return api('/api/admin/push', {
+        method: 'POST',
+        body: sub.toJSON ? sub.toJSON() : sub
+      });
+    }).then(function () {
+      panelPushActive = true;
+      var btn = $('#pushAdminBtn');
+      if (btn) { btn.textContent = 'Avisos ativados ✓'; btn.disabled = true; }
+      return true;
+    });
+  }
+  function initPanelPush() {
+    var btn = $('#pushAdminBtn');
+    if (!btn) return;
+    if (!panelPushSupported()) { btn.hidden = true; return; }
+    btn.hidden = false;
+    if (panelIsIOS() && !panelStandalone()) {
+      btn.textContent = '🔔 Avisar no iPhone';
+      btn.onclick = function () { toast('No iPhone, adicione o painel à Tela de Início para ativar'); };
+      return;
+    }
+    if (Notification.permission === 'granted') {
+      btn.textContent = 'Avisos ativados ✓';
+      btn.disabled = true;
+      subscribePanelPush().catch(function () { /* tenta de novo no botão */ btn.disabled = false; });
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      btn.textContent = 'Avisos bloqueados';
+      btn.onclick = function () { toast('Libere as notificações nas configurações do site'); };
+      return;
+    }
+    btn.textContent = '🔔 Avisar de novos pedidos';
+    btn.onclick = function () {
+      if (pushBtnBusy) return;
+      pushBtnBusy = true;
+      btn.disabled = true;
+      btn.textContent = 'Ativando…';
+      Notification.requestPermission().then(function (perm) {
+        if (perm !== 'granted') throw new Error('permissao');
+        return subscribePanelPush();
+      }).then(function () {
+        toast('Pronto! Vamos avisar de cada pedido novo 🔔');
+      }).catch(function (e) {
+        btn.disabled = false;
+        btn.textContent = '🔔 Avisar de novos pedidos';
+        if (e && e.message === 'permissao') toast('Sem permissão de notificação 😕');
+        else toast('Não foi possível ativar os avisos agora');
+      }).then(function () { pushBtnBusy = false; });
+    };
+  }
+
   // ---------------------------------------------------------------- login
 
   $('#loginForm').addEventListener('submit', function (e) {
@@ -156,10 +351,14 @@
     $('#app').hidden = false;
     loadAll().then(function () {
       /* recarregou a página: volta para a aba em que estava */
+      var wanted = null;
+      try { wanted = new URLSearchParams(location.search).get('aba'); } catch (e) {}
       var saved = localStorage.getItem(TAB_KEY);
-      if (saved && saved !== activeTab && $('#tab-' + saved)) setTab(saved);
+      if (wanted && $('#tab-' + wanted)) setTab(wanted);
+      else if (saved && saved !== activeTab && $('#tab-' + saved)) setTab(saved);
       if (window.innerWidth > 760) $('#pinInput').blur();
     });
+    initPanelPush();
     clearInterval(pollTimer);
     pollTimer = setInterval(pollOrders, 15000);
   }
@@ -169,6 +368,7 @@
       state.store = d.store || {};
       state.products = d.products || [];
       state.orders = d.orders || [];
+      alertNewOrders(syncOrders(state.orders));
       renderAll();
     }).catch(function (e) {
       if (e.status === 401) {
@@ -182,6 +382,7 @@
   function pollOrders() {
     api('/api/admin/orders').then(function (d) {
       state.orders = d.orders || [];
+      alertNewOrders(syncOrders(state.orders));
       renderOrders();
     }).catch(function () { /* silencioso */ });
   }
@@ -1579,6 +1780,12 @@
   }
 
   // ---------------------------------------------------------------- start
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', function (e) {
+      if (e.data && e.data.type === 'push-orders' && !$('#app').hidden) setTab('pedidos');
+    });
+  }
 
   if (pin) {
     boot();

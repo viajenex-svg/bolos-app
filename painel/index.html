@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#2B2118">
   <meta name="robots" content="noindex">
   <link rel="icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/painel/painel.css?v=28">
+  <link rel="stylesheet" href="/painel/painel.css?v=29">
 </head>
 <body>
 
@@ -83,7 +83,10 @@
     <section class="panel" id="tab-pedidos" hidden>
       <div class="sec-head">
         <div><h2>Pedidos</h2><p>Atualiza a cada 15 segundos.</p></div>
-        <button class="btn ghost" id="refreshOrders" type="button">Atualizar</button>
+        <div class="sec-actions">
+          <button class="btn ghost" id="pushAdminBtn" type="button" hidden>🔔 Avisar de novos pedidos</button>
+          <button class="btn ghost" id="refreshOrders" type="button">Atualizar</button>
+        </div>
       </div>
       <div class="orders" id="ordersList"></div>
     </section>
@@ -296,6 +299,6 @@
 
 <div class="toast-p" id="toastP" role="status" aria-live="polite"></div>
 
-<script src="/painel/painel.js?v=33"></script>
+<script src="/painel/painel.js?v=34"></script>
 </body>
 </html>

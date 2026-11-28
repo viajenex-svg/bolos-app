@@ -487,6 +487,7 @@ def load():
         data.setdefault('store', {})
         data.setdefault('products', [])
         data.setdefault('orders', [])
+        data.setdefault('admin_push_subs', [])   # aparelhos do painel avisados de pedidos novos
         return data
 
 
@@ -1261,6 +1262,84 @@ def _push_payload(num, status):
             'url': './?pedido=%s' % quote(num), 'num': num, 'status': status}
 
 
+def _push_payload_admin(order):
+    """Aviso de pedido novo para os aparelhos inscritos no painel."""
+    num = str(order.get('num') or '')
+    items = order.get('items') or []
+    qty = 0
+    for it in items:
+        try:
+            qty += int(it.get('qty') or 1)
+        except (TypeError, ValueError):
+            qty += 1
+    try:
+        total = ('R$ %.2f' % float(order.get('total') or 0)).replace('.', ',')
+    except (TypeError, ValueError):
+        total = 'R$ 0,00'
+    who = (str(order.get('name') or '').strip() or 'Cliente').split(' ')[0]
+    return {'title': 'Novo pedido #%s 🧾' % num,
+            'body': '%s · %d item(ns) · %s' % (who, qty, total),
+            'tag': 'admin-order-%s' % num,
+            'url': '/painel/?aba=pedidos',
+            'num': num, 'panel': True}
+
+
+def _push_notify_admin(data, order):
+    """Push imediato para os aparelhos do painel; nunca atrasa a resposta."""
+    if _webpush is None:
+        return
+    subs = [dict(s) for s in (data.get('admin_push_subs') or []) if s.get('endpoint')]
+    if not subs:
+        return
+    payload = json.dumps(_push_payload_admin(order), ensure_ascii=False)
+    threading.Thread(target=_push_send_admin, daemon=True,
+                     args=(payload, subs)).start()
+
+
+_ADMIN_PUSH_MAX = 10            # aparelhos do painel inscritos
+
+
+def _push_send_admin(payload, subs):
+    if _webpush is None:
+        return
+    cfg = ensure_push_cfg()
+    if not cfg:
+        return
+    priv = _vapid_der(cfg.get('private'))
+    gone = []
+    sent = 0
+    for s in subs:
+        info = {'endpoint': s.get('endpoint'), 'keys': s.get('keys') or {}}
+        try:
+            _webpush(subscription_info=info, data=payload,
+                     vapid_private_key=priv,
+                     vapid_claims={'sub': cfg.get('subject') or PUSH_CONTACT},
+                     ttl=PUSH_TTL, timeout=10,
+                     headers={'Urgency': 'high'})
+            sent += 1
+        except _WebPushException as e:
+            code = getattr(getattr(e, 'response', None), 'status_code', None)
+            if code in (404, 410):
+                gone.append(info['endpoint'])
+            else:
+                print('push painel: erro %s %s' % (code or '?', str(e)[:200]), flush=True)
+        except Exception as e:
+            print('push painel: falhou (%s)' % (str(e)[:200]), flush=True)
+    if sent:
+        print('push painel: %d aviso(s) enviado(s)' % sent, flush=True)
+    if not gone:
+        return
+    with LOCK:
+        fresh = load()
+        subs_now = fresh.get('admin_push_subs') or []
+        gone_set = set(gone)
+        kept = [s for s in subs_now if s.get('endpoint') not in gone_set]
+        if len(kept) != len(subs_now):
+            fresh['admin_push_subs'] = kept
+            save(fresh)
+
+
+
 def _push_notify(data, order, status):
     """Agenda o envio em thread daemon; nunca atrasa nem derruba a resposta."""
     if status not in (3, 4) or _webpush is None:
@@ -1595,6 +1674,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             data = dict(data)
             data.pop('push_cfg', None)      # a chave privada VAPID nunca sai daqui
+            data['pushDevices'] = len(data.pop('admin_push_subs', None) or [])
             data['store'] = dict(data['store'],
                                  openNow=is_open_now(data['store']),
                                  hoursText=hours_text(data['store']))
@@ -1619,6 +1699,7 @@ class Handler(BaseHTTPRequestHandler):
             # artefato público do GitHub e ninguém deve poder enviar push
             safe = json.loads(json.dumps(data, ensure_ascii=False))
             safe.pop('push_cfg', None)
+            safe.pop('admin_push_subs', None)
             for o in safe.get('orders', []):
                 o.pop('push_subs', None)
             body = json.dumps(safe, ensure_ascii=False, indent=1).encode('utf-8')
@@ -1736,6 +1817,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
             return self._upload(self._body())
 
+        if path == '/api/admin/push':
+            if not self._need_auth():
+                return
+            return self._admin_push_save()
+
         if path == '/api/admin/products':
             if not self._need_auth():
                 return
@@ -1814,6 +1900,17 @@ class Handler(BaseHTTPRequestHandler):
             _track_save(track, data)
             return self._json({'ok': True})
 
+        if path == '/api/admin/push':
+            b = self._body()
+            ep = str(b.get('endpoint') or '').strip()
+            data = load()
+            subs = data.get('admin_push_subs') or []
+            kept = [s for s in subs if s.get('endpoint') != ep]
+            if len(kept) != len(subs):
+                data['admin_push_subs'] = kept
+                save(data)
+            return self._json({'ok': True, 'count': len(data.get('admin_push_subs') or [])})
+
         m = re.match(r'^/api/admin/products/([\w-]+)$', path)
         if not m:
             return self._err(404, 'rota não encontrada')
@@ -1826,6 +1923,25 @@ class Handler(BaseHTTPRequestHandler):
         return self._json({'ok': True})
 
     # ---------- ações ----------
+
+    def _admin_push_save(self):
+        """Guarda a inscrição de push do aparelho que está com o painel aberto."""
+        if _webpush is None:
+            return self._err(503, 'avisos indisponíveis nesta versão')
+        if not rate_ok('apush:%s' % self.client_address[0], 20):
+            return self._err(429, 'muitas inscrições, aguarde um minuto')
+        sub = _clean_sub(self._body())
+        if not sub:
+            return self._err(400, 'inscrição inválida')
+        with LOCK:
+            data = load()
+            subs = [s for s in (data.get('admin_push_subs') or [])
+                    if s.get('endpoint') != sub['endpoint']]
+            subs.append(sub)
+            data['admin_push_subs'] = subs[-_ADMIN_PUSH_MAX:]
+            save(data)
+            count = len(data['admin_push_subs'])
+        return self._json({'ok': True, 'count': count})
 
     def _push_subscribe(self, num, query):
         """Guarda a inscrição de push do aparelho para este pedido."""
@@ -2128,6 +2244,7 @@ class Handler(BaseHTTPRequestHandler):
         data['orders'].insert(0, order)
         data['orders'] = data['orders'][:300]
         save(data)
+        _push_notify_admin(data, order)
 
         # resposta pública: sem o mtoken (o link do motoboy só sai pelo painel)
         return self._json({'ok': True,

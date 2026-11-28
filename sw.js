@@ -1,7 +1,7 @@
 /* Delícias do Aleff · Bolos — service worker
    pré-cache do app shell, cache-first com atualização em segundo plano */
 
-var CACHE = 'sc-bolos-v25';
+var CACHE = 'sc-bolos-v26';
 
 var SHELL = [
   './',
@@ -112,7 +112,7 @@ self.addEventListener('push', function (e) {
     tag: d.tag || ('order-' + num),
     renotify: true,
     vibrate: [200, 100, 200],
-    requireInteraction: status === 3,
+    requireInteraction: status === 3 || !!d.panel,
     data: { url: d.url || './', num: num, status: status }
   };
   e.waitUntil(self.registration.showNotification(title, opts));
@@ -124,8 +124,21 @@ self.addEventListener('notificationclick', function (e) {
   var target = data.url || './';
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
-      for (var i = 0; i < list.length; i++) {
-        var c = list[i];
+      var i, c;
+      /* aviso de pedido novo: foca o painel e abre a aba Pedidos */
+      if (data.panel) {
+        for (i = 0; i < list.length; i++) {
+          c = list[i];
+          if (c.url.indexOf('/painel') === -1) continue;
+          return c.focus().then(function (win) {
+            if (win) win.postMessage({ type: 'push-orders' });
+            return win;
+          });
+        }
+        return clients.openWindow(target);
+      }
+      for (i = 0; i < list.length; i++) {
+        c = list[i];
         /* painel, quadro e app do motoboy não são o app do cliente */
         if (c.url.indexOf('/painel') !== -1 || c.url.indexOf('/pedidos') !== -1 ||
             c.url.indexOf('/motoboy') !== -1) continue;

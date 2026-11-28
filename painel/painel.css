@@ -207,6 +207,7 @@ button { cursor: pointer; }
 }
 .sec-head h2 { font-family: var(--serif); font-size: 22px; margin: 0; letter-spacing: -.02em; }
 .sec-head p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+.sec-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .sub { font-family: var(--serif); font-size: 17px; margin: 26px 0 10px; }
 
