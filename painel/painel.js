@@ -401,7 +401,7 @@
   function logout(silent) {
     localStorage.removeItem(PIN_KEY);
     pin = '';
-    clearInterval(pollTimer);
+    clearTimeout(pollTimer);
     $('#app').hidden = true;
     $('#login').hidden = false;
     if (!silent) toast('Saiu do painel');
@@ -425,8 +425,8 @@
       if (window.innerWidth > 760) $('#pinInput').blur();
     });
     initPanelPush();
-    clearInterval(pollTimer);
-    pollTimer = setInterval(pollOrders, 15000);
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(pollOrders, 15000);
   }
 
   function loadAll() {
@@ -453,7 +453,14 @@
       state.orders = d.orders || [];
       alertNewOrders(syncOrders(state.orders));
       renderOrders();
-    }).catch(function () { /* silencioso */ });
+    }).catch(function () { /* silencioso */ }).then(function () {
+      /* Pix em aberto: confere de 4 em 4 s para o "Pix pago" aparecer na hora */
+      var pendingPix = (state.orders || []).some(function (o) {
+        return o.pix && !o.paid && Number(o.status) < 4;
+      });
+      clearTimeout(pollTimer);
+      pollTimer = setTimeout(pollOrders, pendingPix ? 4000 : 15000);
+    });
   }
 
   // ---------------------------------------------------------------- render

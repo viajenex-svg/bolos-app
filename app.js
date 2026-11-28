@@ -2210,7 +2210,9 @@
       if (!alive()) return;
       var cur = orderByNum(num);
       if (!cur || (Number(cur.status) || 1) >= 4) return;
-      orderPolls[num] = setTimeout(tick, ORDER_POLL_MS);
+      /* com Pix em aberto confere de 3 em 3 s: o pagamento precisa aparecer na hora */
+      var wait = (cur.pix && !cur.paid) ? 3000 : ORDER_POLL_MS;
+      orderPolls[num] = setTimeout(tick, wait);
     }
 
     function tick() {

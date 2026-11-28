@@ -1270,6 +1270,15 @@ MP_API = 'https://api.mercadopago.com'
 # o app troca o token no painel e passa a receber na própria conta do MP.
 
 
+def admin_order(o):
+    """Pedido para o painel — sem o base64 do QR (pesado e não usado lá)."""
+    o = dict(o)
+    pix = o.get('pix')
+    if isinstance(pix, dict):
+        o['pix'] = {'id': pix.get('id'), 'copy': pix.get('copy')}
+    return o
+
+
 def mp_cfg(data):
     cfg = data.get('mp_cfg')
     return cfg if isinstance(cfg, dict) else {}
@@ -1340,6 +1349,7 @@ def mp_verify(data, order):
     order['paidVia'] = 'mp'
     save(data)
     print('  Pix pago (consulta): pedido %s' % order.get('num'), flush=True)
+    _push_pix_paid(data, order)
     return True
 
 
@@ -1440,7 +1450,9 @@ def ensure_push_cfg(data=None):
 
 def _push_payload(num, status):
     num = str(num)
-    if status == 4:
+    if status == 9:
+        title, body = 'Pix recebido ✅', 'Pagamento do pedido #%s confirmado.' % num
+    elif status == 4:
         title, body = 'Pedido entregue ✓', 'Seu pedido #%s foi entregue. Bom apetite!' % num
     else:
         title, body = 'Saiu para entrega! 🛵', 'Seu pedido #%s está a caminho.' % num
@@ -1468,6 +1480,36 @@ def _push_payload_admin(order):
             'tag': 'admin-order-%s' % num,
             'url': '/painel/?aba=pedidos',
             'num': num, 'panel': True}
+
+
+def _push_pix_admin(data, order):
+    """Aviso no painel: dinheiro entrou."""
+    if _webpush is None:
+        return
+    subs = [dict(s) for s in (data.get('admin_push_subs') or []) if s.get('endpoint')]
+    if not subs:
+        return
+    num = str(order.get('num') or '')
+    try:
+        total = ('R$ %.2f' % float(order.get('total') or 0)).replace('.', ',')
+    except (TypeError, ValueError):
+        total = 'R$ 0,00'
+    payload = json.dumps({'title': 'Pix pago ✅ Pedido #%s' % num,
+                          'body': 'Pagamento de %s confirmado.' % total,
+                          'tag': 'admin-order-%s' % num,
+                          'url': '/painel/?aba=pedidos',
+                          'num': num, 'panel': True}, ensure_ascii=False)
+    threading.Thread(target=_push_send_admin, daemon=True,
+                     args=(payload, subs)).start()
+
+
+def _push_pix_paid(data, order):
+    """Cliente e painel avisados na hora em que o Pix cai."""
+    try:
+        _push_notify(data, order, 9)
+        _push_pix_admin(data, order)
+    except Exception as e:
+        print('  aviso: push do Pix falhou (%s)' % str(e)[:120], flush=True)
 
 
 def _broadcast_payload(title, body, url):
@@ -1597,7 +1639,7 @@ def _push_send_admin(payload, subs):
 
 def _push_notify(data, order, status):
     """Agenda o envio em thread daemon; nunca atrasa nem derruba a resposta."""
-    if status not in (3, 4) or _webpush is None:
+    if status not in (3, 4, 9) or _webpush is None:
         return
     subs = [dict(s) for s in (order.get('push_subs') or []) if s.get('endpoint')]
     if not subs or not order.get('num'):
@@ -1904,6 +1946,7 @@ class Handler(BaseHTTPRequestHandler):
                 o['paidVia'] = 'mp'
                 save(data)
                 print('  Pix pago: pedido %s' % o.get('num'), flush=True)
+                _push_pix_paid(data, o)
             break
         return self._json({'ok': True})
 
@@ -2070,6 +2113,7 @@ class Handler(BaseHTTPRequestHandler):
             data.pop('push_cfg', None)      # a chave privada VAPID nunca sai daqui
             data.pop('admin', None)         # o PIN nunca sai daqui
             data['mp'] = mp
+            data['orders'] = [admin_order(o) for o in data.get('orders', [])]
             data['pushDevices'] = len(data.pop('admin_push_subs', None) or [])
             data['appDevices'] = len(_all_app_subs(data))
             data.pop('broadcast_subs', None)
@@ -2088,7 +2132,7 @@ class Handler(BaseHTTPRequestHandler):
                     changed = True
             if changed:
                 save(data)
-            return self._json({'orders': data.get('orders', [])})
+            return self._json({'orders': [admin_order(o) for o in data.get('orders', [])]})
 
         if path == '/api/admin/backup':
             if not self._need_auth():
