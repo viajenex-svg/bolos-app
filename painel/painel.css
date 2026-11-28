@@ -969,3 +969,83 @@ button { cursor: pointer; }
 .bc-log-item b { display: block; font-size: 13.5px; margin: 3px 0 1px; }
 .bc-log-item span { font-size: 12.5px; color: var(--ink-2); }
 .bc-log-item .bc-link { font-size: 11.5px; color: var(--accent-d); word-break: break-all; }
+
+/* ---------------- desktop / PC ---------------- */
+
+@media (min-width: 1000px) {
+  .app {
+    max-width: 1240px;
+    padding: 0 24px 72px;
+    display: grid;
+    grid-template-columns: 216px minmax(0, 1fr);
+    column-gap: 30px;
+    align-items: start;
+  }
+  .app > .top { grid-column: 1 / -1; }
+
+  /* abas viram menu lateral */
+  .app > .tabs {
+    grid-column: 1;
+    grid-row: 2;
+    flex-direction: column;
+    gap: 3px;
+    overflow: visible;
+    margin: 0 0 20px;
+    padding: 6px;
+    position: sticky;
+    top: 92px;
+  }
+  .app > .tabs .tab {
+    flex: 0 0 auto;
+    width: 100%;
+    justify-content: flex-start;
+    text-align: left;
+    padding: 11px 14px;
+    font-size: 14px;
+  }
+  .app > .tabs .tab .dot-badge { margin-left: auto; }
+
+  .app > .main { grid-column: 2; grid-row: 2; min-width: 0; }
+
+  .sec-head { margin: 2px 0 18px; }
+  .sec-head h2 { font-size: 26px; }
+  .sec-head p { font-size: 13.5px; }
+
+  .grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+
+  /* Loja: formulário em duas colunas com campos de largura normal */
+  .store-card { grid-template-columns: 200px minmax(0, 1fr); gap: 28px; padding: 22px; }
+  .store-card .fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 15px 20px;
+    align-items: start;
+  }
+  .store-card .fields > .two,
+  .store-card .fields > .hours-grid,
+  .store-card .fields > .check,
+  .store-card .fields > .fee-hint,
+  .store-card .fields > h3,
+  .store-card .fields > .ex-pick,
+  .store-card .fields > .ex-list,
+  .store-card .fields > .fee-test { grid-column: 1 / -1; }
+  .store-card .fields .field { min-width: 0; }
+  .store-card .coupons,
+  .store-card .pop-chips,
+  .store-card .banners { max-width: 760px; }
+
+  /* modais centralizados e mais largos */
+  .modal { align-items: center; padding: 28px; }
+  .modal-card {
+    max-width: 680px;
+    border-radius: 20px;
+    max-height: 90vh;
+    max-height: 90dvh;
+    padding-bottom: 22px;
+  }
+
+  .login-card { max-width: 380px; }
+
+  .bc-card, .bc-log { max-width: 720px; }
+}
+
