@@ -2006,24 +2006,30 @@
   }
 
   function chirp() {
+    /* ding-dong duplo: sino descendente (sol5 → mi5), repetido */
     try {
       var AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
       var ac = new AC();
-      [0, 0.22].forEach(function (t, i) {
-        var o = ac.createOscillator();
-        var g = ac.createGain();
-        o.type = 'sine';
-        o.frequency.value = i ? 1180 : 880;
-        g.gain.setValueAtTime(0.0001, ac.currentTime + t);
-        g.gain.exponentialRampToValueAtTime(0.22, ac.currentTime + t + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + t + 0.18);
-        o.connect(g);
-        g.connect(ac.destination);
-        o.start(ac.currentTime + t);
-        o.stop(ac.currentTime + t + 0.2);
+      var notes = [[0, 784], [0.5, 659], [1.15, 784], [1.65, 659]];
+      notes.forEach(function (n) {
+        var t = ac.currentTime + n[0];
+        [1, 2.02].forEach(function (mult, h) {   /* fundamental + harmônico de sino */
+          var o = ac.createOscillator();
+          var g = ac.createGain();
+          o.type = 'sine';
+          o.frequency.value = n[1] * mult;
+          var peak = h ? 0.05 : 0.24;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(peak, t + 0.015);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+          o.connect(g);
+          g.connect(ac.destination);
+          o.start(t);
+          o.stop(t + 0.95);
+        });
       });
-      setTimeout(function () { ac.close && ac.close(); }, 900);
+      setTimeout(function () { ac.close && ac.close(); }, 3200);
     } catch (e) { /* sem áudio: só vibra */ }
   }
 
