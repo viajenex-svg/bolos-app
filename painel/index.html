@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#2B2118">
   <meta name="robots" content="noindex">
   <link rel="icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/painel/painel.css?v=29">
+  <link rel="stylesheet" href="/painel/painel.css?v=30">
 </head>
 <body>
 
@@ -51,6 +51,7 @@
     <button type="button" class="tab" data-tab="estoque">Estoque</button>
     <button type="button" class="tab" data-tab="pedidos">Pedidos <i class="dot-badge" id="ordersBadge" hidden>0</i></button>
     <button type="button" class="tab" data-tab="caixa">Caixa</button>
+    <button type="button" class="tab" data-tab="avisos">Avisos</button>
     <button type="button" class="tab" data-tab="loja">Loja</button>
   </nav>
 
@@ -121,6 +122,50 @@
         <h3>Mais vendidos</h3>
         <div class="top-products" id="topProducts"></div>
       </div>
+    </section>
+
+    <!-- AVISOS -->
+    <section class="panel" id="tab-avisos" hidden>
+      <div class="sec-head">
+        <div><h2>Avisos</h2><p>Notificação para quem tem o app com os avisos ligados.</p></div>
+      </div>
+
+      <div class="bc-card">
+        <div class="bc-count"><b id="bcCount">—</b> aparelho(s) podem receber</div>
+
+        <div class="bc-preview" id="bcPreview">
+          <img src="/icons/icon-192.png" alt="">
+          <div class="bc-prev-txt">
+            <b id="bcPrevTitle">Título do aviso</b>
+            <span id="bcPrevBody">A mensagem aparece aqui.</span>
+            <small id="bcPrevUrl"></small>
+          </div>
+        </div>
+
+        <div class="fields">
+          <label class="field">
+            <span>Título</span>
+            <input id="bcTitle" type="text" maxlength="70" placeholder="Ex.: Promoção de hoje 🎉">
+          </label>
+          <label class="field">
+            <span>Mensagem</span>
+            <textarea id="bcBody" maxlength="180" placeholder="Ex.: Todos os bolos com 20% off até 18h."></textarea>
+            <small class="bc-hint"><span id="bcLen">0</span>/180</small>
+          </label>
+          <label class="field">
+            <span>Link (opcional)</span>
+            <input id="bcUrl" type="text" maxlength="300" placeholder="https://wa.me/55... ou /">
+          </label>
+        </div>
+
+        <div class="bc-actions">
+          <button class="btn solid" id="bcSend" type="button">Enviar aviso</button>
+        </div>
+        <p class="bc-note">Só quem liberou as notificações do site recebe. O envio não pode ser cancelado.</p>
+      </div>
+
+      <h3 class="sub">Enviados</h3>
+      <div class="bc-log" id="bcLog"></div>
     </section>
 
     <!-- LOJA -->
@@ -299,6 +344,6 @@
 
 <div class="toast-p" id="toastP" role="status" aria-live="polite"></div>
 
-<script src="/painel/painel.js?v=34"></script>
+<script src="/painel/painel.js?v=35"></script>
 </body>
 </html>

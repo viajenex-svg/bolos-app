@@ -104,6 +104,7 @@ self.addEventListener('push', function (e) {
   try { d = e.data ? e.data.json() : {}; } catch (err) { d = {}; }
   var num = d.num ? String(d.num) : '';
   var status = Number(d.status) || 3;
+  var promo = !!d.promo;
   var title = d.title || (num ? 'Pedido #' + num : 'Delícias do Aleff');
   var opts = {
     body: d.body || 'Seu pedido atualizou.',
@@ -112,7 +113,7 @@ self.addEventListener('push', function (e) {
     tag: d.tag || ('order-' + num),
     renotify: true,
     vibrate: [200, 100, 200],
-    requireInteraction: status === 3 || !!d.panel,
+    requireInteraction: (!promo && status === 3) || !!d.panel,
     data: { url: d.url || './', num: num, status: status }
   };
   e.waitUntil(self.registration.showNotification(title, opts));

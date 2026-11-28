@@ -1553,6 +1553,13 @@
 
   function postSub(order, sub) {
     var j = sub.toJSON ? sub.toJSON() : sub;
+    /* cadastro global: o aparelho também recebe avisos/promoções da loja */
+    fetch('api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(j)
+    }).catch(function () { /* o aviso do pedido continua valendo */ });
+
     return fetch('api/order/' + encodeURIComponent(order.num) + '/push?t=' +
                  encodeURIComponent(order.token), {
       method: 'POST',

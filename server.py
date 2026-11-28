@@ -51,6 +51,7 @@ MAX_UPLOAD = 4 * 1024 * 1024    # 4 MB de imagem
 # notificações push (avisos de "a caminho" e "entregue" com o app fechado)
 PUSH_TTL = 3600                 # push válido por 1 h na fila do serviço
 PUSH_MAX_SUBS = 5               # aparelhos por pedido
+_BROADCAST_MAX = 2000           # aparelhos que recebem avisos da loja
 PUSH_CONTACT = (os.environ.get('PUSH_CONTACT', '').strip()
                 or 'mailto:contato@deliciasdoaleff.com')
 
@@ -488,6 +489,8 @@ def load():
         data.setdefault('products', [])
         data.setdefault('orders', [])
         data.setdefault('admin_push_subs', [])   # aparelhos do painel avisados de pedidos novos
+        data.setdefault('broadcast_subs', [])    # aparelhos de clientes que aceitaram avisos
+        data.setdefault('broadcast_log', [])     # últimos avisos enviados pelo painel
         return data
 
 
@@ -1284,6 +1287,75 @@ def _push_payload_admin(order):
             'num': num, 'panel': True}
 
 
+def _broadcast_payload(title, body, url):
+    return {'title': title, 'body': body, 'url': url or './',
+            'tag': 'promo-%d' % int(time.time()), 'promo': True}
+
+
+def _all_app_subs(data):
+    """Todos os aparelhos de clientes: inscrições globais + as feitas por pedido.
+
+    Muitos clientes ativaram os avisos antes de existir o cadastro global;
+    unir as duas fontes evita pedir que eles ativem de novo.
+    """
+    seen = {}
+    for s in (data.get('broadcast_subs') or []):
+        if s.get('endpoint'):
+            seen[s['endpoint']] = s
+    for o in (data.get('orders') or []):
+        for s in (o.get('push_subs') or []):
+            if s.get('endpoint'):
+                seen.setdefault(s['endpoint'], s)
+    return list(seen.values())
+
+
+def _push_broadcast(title, body, url, subs):
+    if _webpush is None:
+        return
+    cfg = ensure_push_cfg()
+    if not cfg:
+        return
+    payload = json.dumps(_broadcast_payload(title, body, url), ensure_ascii=False)
+    priv = _vapid_der(cfg.get('private'))
+    gone = []
+    sent = 0
+    for s in subs:
+        info = {'endpoint': s.get('endpoint'), 'keys': s.get('keys') or {}}
+        try:
+            _webpush(subscription_info=info, data=payload,
+                     vapid_private_key=priv,
+                     vapid_claims={'sub': cfg.get('subject') or PUSH_CONTACT},
+                     ttl=PUSH_TTL, timeout=10,
+                     headers={'Urgency': 'normal'})
+            sent += 1
+        except _WebPushException as e:
+            code = getattr(getattr(e, 'response', None), 'status_code', None)
+            if code in (404, 410):
+                gone.append(info['endpoint'])
+            else:
+                print('broadcast: erro %s %s' % (code or '?', str(e)[:200]), flush=True)
+        except Exception as e:
+            print('broadcast: falhou (%s)' % (str(e)[:200]), flush=True)
+    print('broadcast: %d/%d enviado(s)' % (sent, len(subs)), flush=True)
+    gone_set = set(gone)
+    with LOCK:
+        fresh = load()
+        changed = False
+        kept = [s for s in (fresh.get('broadcast_subs') or [])
+                if s.get('endpoint') not in gone_set]
+        if len(kept) != len(fresh.get('broadcast_subs') or []):
+            fresh['broadcast_subs'] = kept
+            changed = True
+        for o in (fresh.get('orders') or []):
+            subs_now = o.get('push_subs') or []
+            sub_kept = [s for s in subs_now if s.get('endpoint') not in gone_set]
+            if len(sub_kept) != len(subs_now):
+                o['push_subs'] = sub_kept
+                changed = True
+        if changed:
+            save(fresh)
+
+
 def _push_notify_admin(data, order):
     """Push imediato para os aparelhos do painel; nunca atrasa a resposta."""
     if _webpush is None:
@@ -1675,6 +1747,8 @@ class Handler(BaseHTTPRequestHandler):
             data = dict(data)
             data.pop('push_cfg', None)      # a chave privada VAPID nunca sai daqui
             data['pushDevices'] = len(data.pop('admin_push_subs', None) or [])
+            data['appDevices'] = len(_all_app_subs(data))
+            data.pop('broadcast_subs', None)
             data['store'] = dict(data['store'],
                                  openNow=is_open_now(data['store']),
                                  hoursText=hours_text(data['store']))
@@ -1700,6 +1774,7 @@ class Handler(BaseHTTPRequestHandler):
             safe = json.loads(json.dumps(data, ensure_ascii=False))
             safe.pop('push_cfg', None)
             safe.pop('admin_push_subs', None)
+            safe.pop('broadcast_subs', None)
             for o in safe.get('orders', []):
                 o.pop('push_subs', None)
             body = json.dumps(safe, ensure_ascii=False, indent=1).encode('utf-8')
@@ -1803,6 +1878,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({'ok': True})
             return self._err(401, 'PIN incorreto')
 
+        if path == '/api/push/subscribe':
+            return self._app_push_subscribe()
+
         if path == '/api/orders':
             return self._create_order(self._body())
 
@@ -1821,6 +1899,11 @@ class Handler(BaseHTTPRequestHandler):
             if not self._need_auth():
                 return
             return self._admin_push_save()
+
+        if path == '/api/admin/broadcast':
+            if not self._need_auth():
+                return
+            return self._send_broadcast(self._body())
 
         if path == '/api/admin/products':
             if not self._need_auth():
@@ -1923,6 +2006,55 @@ class Handler(BaseHTTPRequestHandler):
         return self._json({'ok': True})
 
     # ---------- ações ----------
+
+    def _app_push_subscribe(self):
+        """Inscrição global do aparelho do cliente (recebe avisos da loja)."""
+        if _webpush is None:
+            return self._err(503, 'avisos indisponíveis nesta versão')
+        if not rate_ok('bsub:%s' % self.client_address[0], 20):
+            return self._err(429, 'muitas inscrições, aguarde um minuto')
+        sub = _clean_sub(self._body())
+        if not sub:
+            return self._err(400, 'inscrição inválida')
+        with LOCK:
+            data = load()
+            subs = [s for s in (data.get('broadcast_subs') or [])
+                    if s.get('endpoint') != sub['endpoint']]
+            sub['addedAt'] = int(time.time())
+            subs.append(sub)
+            data['broadcast_subs'] = subs[-_BROADCAST_MAX:]
+            save(data)
+            count = len(_all_app_subs(data))
+        return self._json({'ok': True, 'subscribers': count})
+
+    def _send_broadcast(self, b):
+        """Envia um aviso promocional para todos os aparelhos dos clientes."""
+        if _webpush is None:
+            return self._err(503, 'avisos indisponíveis nesta versão')
+        title = str(b.get('title') or '').strip()[:70]
+        body = str(b.get('body') or '').strip()[:180]
+        url = str(b.get('url') or '').strip()[:300]
+        if not title or not body:
+            return self._err(400, 'título e mensagem são obrigatórios')
+        if url and not (url.startswith('/') or url.startswith('https://')):
+            return self._err(400, 'link inválido')
+        if not rate_ok('bc:%s' % self.client_address[0], 6, 60):
+            return self._err(429, 'muitos avisos seguidos — aguarde um minuto')
+        with LOCK:
+            data = load()
+            subs = _all_app_subs(data)
+            entry = {'title': title, 'body': body, 'url': url,
+                     'at': int(time.time()), 'total': len(subs)}
+            log = data.get('broadcast_log') or []
+            log.insert(0, entry)
+            data['broadcast_log'] = log[:30]
+            save(data)
+        if not subs:
+            return self._json({'ok': True, 'targets': 0,
+                               'message': 'nenhum aparelho inscrito ainda'})
+        threading.Thread(target=_push_broadcast, daemon=True,
+                         args=(title, body, url, subs)).start()
+        return self._json({'ok': True, 'targets': len(subs)})
 
     def _admin_push_save(self):
         """Guarda a inscrição de push do aparelho que está com o painel aberto."""

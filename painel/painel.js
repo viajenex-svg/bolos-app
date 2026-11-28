@@ -368,6 +368,8 @@
       state.store = d.store || {};
       state.products = d.products || [];
       state.orders = d.orders || [];
+      state.appDevices = d.appDevices || 0;
+      state.broadcastLog = d.broadcast_log || [];
       alertNewOrders(syncOrders(state.orders));
       renderAll();
     }).catch(function (e) {
@@ -396,6 +398,7 @@
     renderOrders();
     renderStore();
     renderCash();
+    renderBroadcast();
   }
 
   function renderBrand() {
@@ -1737,6 +1740,80 @@
         .catch(function (err) { toast(err.message); });
     }, true);
     e.target.value = '';
+  });
+
+  // ---------------------------------------------------------------- avisos
+
+  function renderBroadcast() {
+    var n = Number(state.appDevices) || 0;
+    $('#bcCount').textContent = n;
+    $('#bcSend').disabled = !n;
+
+    var box = $('#bcLog');
+    var log = state.broadcastLog || [];
+    if (!log.length) {
+      box.innerHTML = '<div class="empty-state"><div class="ico">📣</div><b>Nenhum aviso enviado</b>' +
+        '<small>Os avisos que você mandar aparecem aqui.</small></div>';
+      return;
+    }
+    box.innerHTML = log.map(function (e) {
+      var d = new Date((Number(e.at) || 0) * 1000);
+      var when = isNaN(d.getTime()) ? '' :
+        d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' às ' +
+        d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      return '<article class="bc-log-item">' +
+        '<div class="bc-when"><span>' + esc(when) + '</span><span>' +
+          (Number(e.total) || 0) + ' aparelho(s)</span></div>' +
+        '<b>' + esc(e.title) + '</b>' +
+        '<span>' + esc(e.body) + '</span>' +
+        (e.url ? '<span class="bc-link">🔗 ' + esc(e.url) + '</span>' : '') +
+        '</article>';
+    }).join('');
+  }
+
+  function syncBcPreview() {
+    var t = $('#bcTitle').value.trim();
+    var b = $('#bcBody').value.trim();
+    var u = $('#bcUrl').value.trim();
+    $('#bcPrevTitle').textContent = t || 'Título do aviso';
+    $('#bcPrevBody').textContent = b || 'A mensagem aparece aqui.';
+    $('#bcPrevUrl').textContent = u;
+    $('#bcPrevUrl').hidden = !u;
+    $('#bcLen').textContent = $('#bcBody').value.length;
+  }
+
+  ['#bcTitle', '#bcBody', '#bcUrl'].forEach(function (sel) {
+    $(sel).addEventListener('input', syncBcPreview);
+  });
+
+  $('#bcSend').addEventListener('click', function () {
+    var title = $('#bcTitle').value.trim();
+    var body = $('#bcBody').value.trim();
+    var url = $('#bcUrl').value.trim();
+    if (!title || !body) { toast('Preencha o título e a mensagem'); return; }
+
+    var n = Number(state.appDevices) || 0;
+    if (!n) { toast('Nenhum aparelho inscrito ainda'); return; }
+    if (!window.confirm('Enviar "' + title + '" para ' + n + ' aparelho(s) agora?\nNão dá para cancelar o envio.')) return;
+
+    var btn = $('#bcSend');
+    btn.disabled = true;
+    btn.textContent = 'Enviando…';
+    api('/api/admin/broadcast', { method: 'POST', body: { title: title, body: body, url: url } })
+      .then(function (d) {
+        var sent = Number(d.targets) || 0;
+        toast(sent ? 'Aviso enviado para ' + sent + ' aparelho(s) 📣' : 'Aviso registrado — nenhum aparelho inscrito');
+        $('#bcTitle').value = '';
+        $('#bcBody').value = '';
+        $('#bcUrl').value = '';
+        syncBcPreview();
+        return loadAll();
+      })
+      .catch(function (e) { toast('Falha ao enviar: ' + e.message); })
+      .then(function () {
+        btn.textContent = 'Enviar aviso';
+        btn.disabled = !n;
+      });
   });
 
   // ---------------------------------------------------------------- upload
