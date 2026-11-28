@@ -460,6 +460,7 @@
   function renderAll() {
     renderBrand();
     renderProducts();
+    renderPdv();
     renderStock();
     renderOrders();
     renderStore();
@@ -562,6 +563,7 @@
 
     box.innerHTML = state.orders.map(function (o) {
       var st = Math.min(4, Math.max(1, Number(o.status) || 1));
+      var isPdv = o.channel === 'pdv';
       var when = o.createdAt
         ? new Date(o.createdAt * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
         : (o.time || '—');
@@ -580,19 +582,22 @@
       var mbHref = o.mtoken
         ? location.origin + '/motoboy/?o=' + encodeURIComponent(o.num) + '&t=' + encodeURIComponent(o.mtoken)
         : '';
-      var btns = STATUS.map(function (label, i) {
+      var btns = isPdv ? '' : STATUS.map(function (label, i) {
         var n = i + 1;
         var cls = n === st ? 'on' : (n === st + 1 ? 'next' : '');
         return '<button type="button" class="' + cls + '" data-status="' + n + '">' + label + '</button>';
       }).join('');
-      return '<article class="order' + (st === 1 ? ' new' : '') + '" data-num="' + esc(o.num) + '">' +
+      var disc = Number(o.discount) || 0;
+      return '<article class="order' + (st === 1 && !isPdv ? ' new' : '') + '" data-num="' + esc(o.num) + '">' +
         '<div class="order-head">' +
-        '<div><b>#' + esc(o.num) + '</b> <span class="when">' + when + '</span></div>' +
+        '<div><b>#' + esc(o.num) + '</b> <span class="when">' + when + '</span>' +
+          (isPdv ? ' <span class="pdv-tag">Balcão</span>' : '') + '</div>' +
         '<span class="order-total">' + money(o.total) + '</span>' +
         '</div>' +
         '<ul class="order-items">' + items + '</ul>' +
+        (disc > 0 ? '<div class="order-disc">Desconto −' + money(disc) + '</div>' : '') +
         '<div class="order-meta">' +
-        '<span>📍 ' + esc(o.addr || '—') + '</span>' +
+        (isPdv ? '<span>🏪 Venda no balcão</span>' : '<span>📍 ' + esc(o.addr || '—') + '</span>') +
         (tel ? '<span>📞 ' + esc(tel) + '</span>' : '') +
         '<span>💳 ' + esc(PAY[o.pay] || o.pay || '—') + '</span>' +
         '</div>' +
@@ -602,6 +607,7 @@
           '<button type="button" class="mb-copy" data-copy="' + esc(mbHref) + '">Copiar link</button>' +
           '</div>' : '') +
         '<div class="status-btns">' + btns +
+          (isPdv ? '<span class="pdv-done">✓ Venda concluída</span>' : '') +
           '<button type="button" class="order-del" data-odel aria-label="Apagar pedido">🗑 Apagar</button>' +
         '</div>' +
         '</article>';
@@ -1244,6 +1250,269 @@
     }).join('');
   }
 
+  // ---------------------------------------------------------------- PDV (balcão)
+
+  var pdv = { cart: [], search: '', pay: 'cash', opt: null };
+
+  function pdvSizes(p) {
+    var all = sizesList();
+    return Array.isArray(p.sizes)
+      ? all.filter(function (s) { return p.sizes.indexOf(s.id) >= 0; })
+      : all;
+  }
+
+  function pdvExtras(p) {
+    var all = extrasList();
+    return Array.isArray(p.extras)
+      ? all.filter(function (x) { return p.extras.indexOf(x.id) >= 0; })
+      : all;
+  }
+
+  function pdvVisible() {
+    var q = pdv.search.trim().toLowerCase();
+    return state.products.filter(function (p) {
+      return p.active !== false && (!q || String(p.name || '').toLowerCase().indexOf(q) >= 0);
+    });
+  }
+
+  function pdvKey(it) {
+    return it.pid + '|' + (it.size || '') + '|' + (it.extras || []).slice().sort().join(',');
+  }
+
+  function pdvTotals() {
+    var sub = 0;
+    pdv.cart.forEach(function (it) { sub += it.unit * it.qty; });
+    var raw = parseFloat($('#pdvDisc').value) || 0;
+    if (raw < 0) raw = 0;
+    var disc = $('#pdvDiscType').value === 'pct'
+      ? sub * Math.min(100, raw) / 100
+      : Math.min(sub, raw);
+    disc = Math.round(disc * 100) / 100;
+    return { sub: Math.round(sub * 100) / 100, disc: disc, total: Math.round((sub - disc) * 100) / 100 };
+  }
+
+  function renderPdv() {
+    var grid = $('#pdvGrid');
+    if (!grid) return;
+
+    var list = pdvVisible();
+    grid.innerHTML = list.length ? list.map(function (p) {
+      var out = p.stock === 0;
+      return '<button type="button" class="pdv-item' + (out ? ' out' : '') + '" data-pid="' + esc(p.id) + '"' +
+        (out ? ' disabled' : '') + '>' +
+        '<img src="' + esc(imgSrc(p.img) || '/icons/icon-192.png') + '" alt="" loading="lazy">' +
+        '<span class="pdv-name">' + esc(p.name) + '</span>' +
+        '<span class="pdv-price">' + money(p.price) +
+          (p.stock != null ? ' · ' + (p.stock === 0 ? 'esgotado' : p.stock + ' un') : '') + '</span>' +
+        '</button>';
+    }).join('') : '<p class="cash-empty">Nenhum produto encontrado.</p>';
+
+    renderPdvCart();
+  }
+
+  function renderPdvCart() {
+    var box = $('#pdvItems');
+    if (!box) return;
+
+    if (!pdv.cart.length) {
+      box.innerHTML = '<p class="pdv-empty">Toque nos produtos para montar a venda.</p>';
+    } else {
+      box.innerHTML = pdv.cart.map(function (it, i) {
+        var opts = [];
+        if (it.size) opts.push(it.size);
+        if (it.extras && it.extras.length) opts = opts.concat(it.extras);
+        return '<div class="pdv-line" data-idx="' + i + '">' +
+          '<div class="pdv-line-info"><b>' + esc(it.name) + '</b>' +
+          (opts.length ? '<small>' + esc(opts.join(' · ')) + '</small>' : '') +
+          '<small>' + money(it.unit) + ' cada</small></div>' +
+          '<div class="pdv-stepper">' +
+            '<button type="button" data-dec aria-label="Menos">−</button><b>' + it.qty + '</b>' +
+            '<button type="button" data-inc aria-label="Mais">+</button>' +
+          '</div>' +
+          '<b class="pdv-line-total">' + money(it.unit * it.qty) + '</b>' +
+          '<button type="button" class="pdv-lx" data-rm aria-label="Remover">✕</button>' +
+          '</div>';
+      }).join('');
+    }
+
+    var t = pdvTotals();
+    $('#pdvSub').textContent = money(t.sub);
+    $('#pdvTotal').textContent = money(t.total);
+    $('#pdvFinish').disabled = !pdv.cart.length;
+  }
+
+  function pdvOptUnit() {
+    var o = pdv.opt;
+    if (!o) return 0;
+    var unit = Number(o.p.price) || 0;
+    var s = o.sizes[o.sizeIdx];
+    if (s) unit += Number(s.extra) || 0;
+    o.exs.forEach(function (x, i) { if (o.extras[i]) unit += Number(x.price) || 0; });
+    return Math.round(unit * 100) / 100;
+  }
+
+  function pdvOptPaint() {
+    var o = pdv.opt;
+    if (!o) return;
+    $('#pdvQty').textContent = o.qty;
+    $('#pdvOptPrice').textContent = money(pdvOptUnit() * o.qty);
+  }
+
+  function pdvOpen(p) {
+    pdv.opt = {
+      p: p,
+      sizes: pdvSizes(p),
+      exs: pdvExtras(p),
+      sizeIdx: 0,
+      extras: {},
+      qty: 1
+    };
+    $('#pdvModalTitle').textContent = p.name;
+    $('#pdvSizes').innerHTML = pdv.opt.sizes.map(function (s, i) {
+      return '<button type="button" class="pdv-chip' + (i === 0 ? ' on' : '') + '" data-size="' + i + '">' +
+        esc(s.label) + (Number(s.extra) ? ' <small>+' + money(s.extra) + '</small>' : '') + '</button>';
+    }).join('');
+    $('#pdvExtras').innerHTML = pdv.opt.exs.map(function (x, i) {
+      return '<label class="pdv-ex"><input type="checkbox" data-ex="' + i + '"> ' +
+        '<span>' + esc(x.label) + '</span>' +
+        '<b>' + (Number(x.price) ? '+' + money(x.price) : 'grátis') + '</b></label>';
+    }).join('');
+    pdvOptPaint();
+    $('#pdvModal').hidden = false;
+  }
+
+  function pdvCloseOpt() {
+    $('#pdvModal').hidden = true;
+    pdv.opt = null;
+  }
+
+  function pdvAddOpt() {
+    var o = pdv.opt;
+    if (!o) return;
+    var s = o.sizes[o.sizeIdx];
+    var labels = o.exs.filter(function (x, i) { return o.extras[i]; })
+      .map(function (x) { return x.label; });
+    var it = {
+      pid: o.p.id, name: o.p.name, img: o.p.img || '',
+      unit: pdvOptUnit(), qty: o.qty,
+      size: s ? s.label : '', extras: labels
+    };
+    var key = pdvKey(it);
+    var found = null;
+    pdv.cart.forEach(function (c) { if (pdvKey(c) === key) found = c; });
+    if (found) found.qty = Math.min(50, found.qty + it.qty);
+    else pdv.cart.push(it);
+    pdvCloseOpt();
+    renderPdvCart();
+  }
+
+  function pdvFinish() {
+    if (!pdv.cart.length) { toast('Adicione itens à venda'); return; }
+    var btn = $('#pdvFinish');
+    btn.disabled = true;
+    btn.textContent = 'Registrando…';
+    api('/api/admin/pdv', {
+      method: 'POST',
+      body: {
+        items: pdv.cart.map(function (it) {
+          return { pid: it.pid, qty: it.qty, unit: it.unit, size: it.size, extras: it.extras };
+        }),
+        discount: parseFloat($('#pdvDisc').value) || 0,
+        discountType: $('#pdvDiscType').value,
+        pay: pdv.pay,
+        name: $('#pdvClient').value.trim()
+      }
+    }).then(function (d) {
+      toast('Venda #' + d.order.num + ' registrada · ' + money(d.order.total));
+      pdv.cart = [];
+      $('#pdvDisc').value = '';
+      $('#pdvClient').value = '';
+      loadAll();
+    }).catch(function (e) {
+      toast('Erro na venda: ' + e.message);
+    }).then(function () {
+      btn.textContent = 'Finalizar venda';
+      renderPdvCart();
+    });
+  }
+
+  $('#pdvSearch').addEventListener('input', function () {
+    pdv.search = this.value;
+    renderPdv();
+  });
+
+  $('#pdvGrid').addEventListener('click', function (e) {
+    var b = e.target.closest('.pdv-item');
+    if (!b || b.disabled) return;
+    var p = state.products.filter(function (x) { return String(x.id) === b.dataset.pid; })[0];
+    if (p) pdvOpen(p);
+  });
+
+  $('#pdvItems').addEventListener('click', function (e) {
+    var row = e.target.closest('.pdv-line');
+    if (!row) return;
+    var it = pdv.cart[Number(row.dataset.idx)];
+    if (!it) return;
+    if (e.target.closest('[data-inc]')) it.qty = Math.min(50, it.qty + 1);
+    else if (e.target.closest('[data-dec]')) {
+      it.qty -= 1;
+      if (it.qty < 1) pdv.cart.splice(pdv.cart.indexOf(it), 1);
+    } else if (e.target.closest('[data-rm]')) {
+      pdv.cart.splice(pdv.cart.indexOf(it), 1);
+    } else return;
+    renderPdvCart();
+  });
+
+  $('#pdvPay').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-pay]');
+    if (!b) return;
+    pdv.pay = b.dataset.pay;
+    $$('#pdvPay button').forEach(function (x) { x.classList.toggle('on', x === b); });
+  });
+
+  $('#pdvDisc').addEventListener('input', renderPdvCart);
+  $('#pdvDiscType').addEventListener('change', renderPdvCart);
+
+  $('#pdvClear').addEventListener('click', function () {
+    pdv.cart = [];
+    $('#pdvDisc').value = '';
+    $('#pdvClient').value = '';
+    renderPdvCart();
+  });
+
+  $('#pdvFinish').addEventListener('click', pdvFinish);
+
+  $('#pdvSizes').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-size]');
+    if (!b || !pdv.opt) return;
+    pdv.opt.sizeIdx = Number(b.dataset.size);
+    $$('#pdvSizes .pdv-chip').forEach(function (x) { x.classList.toggle('on', x === b); });
+    pdvOptPaint();
+  });
+
+  $('#pdvExtras').addEventListener('change', function (e) {
+    var i = e.target.getAttribute('data-ex');
+    if (i == null || !pdv.opt) return;
+    pdv.opt.extras[i] = e.target.checked;
+    pdvOptPaint();
+  });
+
+  $('#pdvMinus').addEventListener('click', function () {
+    if (!pdv.opt) return;
+    pdv.opt.qty = Math.max(1, pdv.opt.qty - 1);
+    pdvOptPaint();
+  });
+
+  $('#pdvPlus').addEventListener('click', function () {
+    if (!pdv.opt) return;
+    pdv.opt.qty = Math.min(50, pdv.opt.qty + 1);
+    pdvOptPaint();
+  });
+
+  $('#pdvOptAdd').addEventListener('click', pdvAddOpt);
+  $('#pdvOptCancel').addEventListener('click', pdvCloseOpt);
+  $('#pdvOptX').addEventListener('click', pdvCloseOpt);
+
   // ---------------------------------------------------------------- tabs
 
   $('#tabs').addEventListener('click', function (e) {
@@ -1294,6 +1563,7 @@
     var revenue = 0, fees = 0, units = 0, items = {};
     var pay = { pix: 0, card: 0, cash: 0 };
     var pending = 0;
+    var balcaoRev = 0, balcaoN = 0, appRev = 0, appN = 0;
 
     list.forEach(function (o) {
       var total = Number(o.total) || 0;
@@ -1305,6 +1575,8 @@
       revenue += total;
       fees += Math.max(0, total - sub);
       if (Number(o.status) < 4) pending++;
+      if (o.channel === 'pdv') { balcaoRev += total; balcaoN++; }
+      else { appRev += total; appN++; }
 
       var k = pay[o.pay] != null ? o.pay : 'pix';
       pay[k] += total;
@@ -1330,6 +1602,13 @@
       kpi('Ticket médio', money(tickets), 'por pedido'),
       kpi('Itens vendidos', String(units), 'unidades')
     ].join('');
+
+    var chBox = $('#cashChannels');
+    if (chBox) {
+      chBox.innerHTML =
+        '<span class="ch">🏪 Balcão: <b>' + money(balcaoRev) + '</b> · ' + balcaoN + ' venda(s)</span>' +
+        '<span class="ch">📱 App: <b>' + money(appRev) + '</b> · ' + appN + ' pedido(s)</span>';
+    }
 
     /* por dia (ou por hora, se for hoje) */
     var buckets = {};

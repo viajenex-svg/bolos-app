@@ -196,7 +196,9 @@
 
   function fetchOrders() {
     api('/api/admin/orders').then(function (d) {
-      var list = (d.orders || []).slice().sort(function (a, b) {
+      var list = (d.orders || []).filter(function (o) {
+        return o.channel !== 'pdv';   /* venda de balcão não entra no quadro da cozinha */
+      }).sort(function (a, b) {
         return (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0);
       });
       var fresh = list.filter(function (o) {

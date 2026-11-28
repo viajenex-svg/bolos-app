@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#2B2118">
   <meta name="robots" content="noindex">
   <link rel="icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/painel/painel.css?v=33">
+  <link rel="stylesheet" href="/painel/painel.css?v=34">
 </head>
 <body>
 
@@ -62,6 +62,7 @@
 
   <nav class="tabs" id="tabs">
     <button type="button" class="tab is-active" data-tab="produtos">Produtos</button>
+    <button type="button" class="tab" data-tab="pdv">PDV</button>
     <button type="button" class="tab" data-tab="estoque">Estoque</button>
     <button type="button" class="tab" data-tab="pedidos">Pedidos <i class="dot-badge" id="ordersBadge" hidden>0</i></button>
     <button type="button" class="tab" data-tab="caixa">Caixa</button>
@@ -81,6 +82,50 @@
         <button class="btn solid" id="newProduct" type="button">+ Novo produto</button>
       </div>
       <div class="grid" id="productGrid"></div>
+    </section>
+
+    <!-- PDV -->
+    <section class="panel" id="tab-pdv" hidden>
+      <div class="sec-head">
+        <div>
+          <h2>PDV · Balcão</h2>
+          <p>Venda na hora, mesmo com a loja fechada. Entra no Caixa como “Balcão”.</p>
+        </div>
+      </div>
+
+      <div class="pdv">
+        <div class="pdv-catalog">
+          <input id="pdvSearch" class="pdv-search" type="search" placeholder="Buscar produto…" autocomplete="off">
+          <div class="pdv-grid" id="pdvGrid"></div>
+        </div>
+
+        <aside class="pdv-cart">
+          <div class="pdv-cart-head">
+            <b>Venda</b>
+            <button type="button" class="pdv-clear" id="pdvClear">Limpar</button>
+          </div>
+          <div class="pdv-items" id="pdvItems"></div>
+          <div class="pdv-sum">
+            <div class="pdv-row"><span>Subtotal</span><b id="pdvSub">R$ 0,00</b></div>
+            <div class="pdv-row pdv-disc">
+              <span>Desconto</span>
+              <select id="pdvDiscType" aria-label="Tipo de desconto">
+                <option value="value">R$</option>
+                <option value="pct">%</option>
+              </select>
+              <input id="pdvDisc" type="number" min="0" step="0.5" inputmode="decimal" placeholder="0" aria-label="Desconto">
+            </div>
+            <div class="pdv-row pdv-total"><span>Total</span><b id="pdvTotal">R$ 0,00</b></div>
+          </div>
+          <div class="pdv-pay" id="pdvPay">
+            <button type="button" data-pay="pix">Pix</button>
+            <button type="button" data-pay="card">Cartão</button>
+            <button type="button" data-pay="cash" class="on">Dinheiro</button>
+          </div>
+          <label class="field pdv-client"><span>Nome do cliente (opcional)</span><input id="pdvClient" type="text" maxlength="60" placeholder="Balcão"></label>
+          <button type="button" class="btn solid block" id="pdvFinish">Finalizar venda</button>
+        </aside>
+      </div>
     </section>
 
     <!-- ESTOQUE -->
@@ -120,6 +165,7 @@
       </div>
 
       <div class="kpis" id="kpis"></div>
+      <div class="cash-channels" id="cashChannels"></div>
 
       <div class="cash-grid">
         <div class="cash-card">
@@ -368,9 +414,34 @@
   </div>
 </div>
 
+<!-- ============ MODAL ITEM PDV ============ -->
+<div class="modal" id="pdvModal" hidden>
+  <div class="modal-card pdv-card" role="dialog" aria-modal="true" aria-labelledby="pdvModalTitle">
+    <header class="modal-head">
+      <h2 id="pdvModalTitle">Item</h2>
+      <button class="x" id="pdvOptX" type="button" aria-label="Fechar">✕</button>
+    </header>
+    <div class="pdv-opt-body">
+      <div class="pdv-sizes" id="pdvSizes"></div>
+      <div class="pdv-extras" id="pdvExtras"></div>
+      <div class="pdv-qty">
+        <button type="button" id="pdvMinus" aria-label="Menos">−</button>
+        <b id="pdvQty">1</b>
+        <button type="button" id="pdvPlus" aria-label="Mais">+</button>
+        <span id="pdvOptPrice"></span>
+      </div>
+    </div>
+    <footer class="modal-foot">
+      <span class="sp"></span>
+      <button class="btn ghost" id="pdvOptCancel" type="button">Cancelar</button>
+      <button class="btn solid" id="pdvOptAdd" type="button">Adicionar</button>
+    </footer>
+  </div>
+</div>
+
 <div class="toast-p" id="toastP" role="status" aria-live="polite"></div>
 
-<script src="/painel/painel.js?v=36"></script>
+<script src="/painel/painel.js?v=37"></script>
 </body>
 <!-- painel desktop build 2 (2026-11-28) -->
 </html>

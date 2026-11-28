@@ -1990,6 +1990,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
             return self._change_pin(self._body())
 
+        if path == '/api/admin/pdv':
+            if not self._need_auth():
+                return
+            return self._create_pdv_sale(self._body())
+
         if path == '/api/push/subscribe':
             return self._app_push_subscribe()
 
@@ -2496,6 +2501,89 @@ class Handler(BaseHTTPRequestHandler):
         # resposta pública: sem o mtoken (o link do motoboy só sai pelo painel)
         return self._json({'ok': True,
                            'order': {k: v for k, v in order.items() if k != 'mtoken'}})
+
+    def _create_pdv_sale(self, b):
+        """venda de balcão: vale fora do horário, sem frete, já concluída"""
+        items = b.get('items') or []
+        if not isinstance(items, list) or not items:
+            return self._err(400, 'venda sem itens')
+
+        data = load()
+        prods = {p['id']: p for p in data['products']}
+        for bp in banner_products(data['store']):
+            prods.setdefault(bp['id'], bp)
+        subtotal = 0.0
+        clean = []
+
+        for it in items:
+            pid = it.get('pid')
+            p = prods.get(pid)
+            if not p:
+                return self._err(409, 'produto indisponível: %s' % pid)
+            try:
+                qty = max(1, min(50, int(it.get('qty') or 1)))
+                unit = it.get('unit')
+                unit = max(0.0, float(p['price'] if unit is None else unit))
+            except (TypeError, ValueError):
+                return self._err(400, 'item inválido')
+            stock = p.get('stock')
+            if stock is not None and stock < qty:
+                return self._err(409, 'sem estoque: %s' % p['name'])
+            ex = it.get('extras') or []
+            if not isinstance(ex, list):
+                ex = []
+            subtotal += unit * qty
+            clean.append({'pid': pid, 'name': p['name'], 'img': p.get('img', ''),
+                          'qty': qty, 'unit': round(unit, 2),
+                          'size': it.get('size'),
+                          'extras': [str(x)[:40] for x in ex][:10],
+                          'note': str(it.get('note') or '')[:200]})
+
+        try:
+            disc = max(0.0, float(b.get('discount') or 0))
+        except (TypeError, ValueError):
+            return self._err(400, 'desconto inválido')
+        if b.get('discountType') == 'pct':
+            disc = subtotal * min(100.0, disc) / 100.0
+        disc = min(subtotal, round(disc, 2))
+        total = round(subtotal - disc, 2)
+
+        for it in clean:
+            p = prods[it['pid']]
+            if p.get('stock') is not None:
+                p['stock'] = max(0, p['stock'] - it['qty'])
+
+        nums = [int(o.get('num', 0)) for o in data['orders'] if str(o.get('num', '')).isdigit()]
+        num = (max(nums) + 1) if nums else 1001
+
+        order = {
+            'num': str(num),
+            'items': clean,
+            'subtotal': round(subtotal, 2),
+            'discount': round(disc, 2),
+            'fee': 0.0,
+            'total': total,
+            'pay': str(b.get('pay') or 'cash')[:20],
+            'name': str(b.get('name') or 'Balcão')[:60],
+            'phone': '',
+            'token': uuid.uuid4().hex[:16],
+            'mtoken': '',
+            'cep': '',
+            'km': None,
+            'feeSource': 'pdv',
+            'destLat': None,
+            'destLon': None,
+            'addr': 'Balcão',
+            'time': time.strftime('%H:%M'),
+            'createdAt': int(time.time()),
+            'status': 4,
+            'channel': 'pdv',
+            'note': str(b.get('note') or '')[:200]
+        }
+        data['orders'].insert(0, order)
+        data['orders'] = data['orders'][:300]
+        save(data)
+        return self._json({'ok': True, 'order': order})
 
     # ---------- motoboy ----------
 
