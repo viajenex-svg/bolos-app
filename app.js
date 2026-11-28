@@ -1516,8 +1516,8 @@
     var canCancel = !order.paid && intStatus(order) < 2;
     $('#successTrack').hidden = unpaidPix;
     $('#successCancel').hidden = !canCancel;
-    /* no Pix em aberto só paga ou cancela — "Voltar" fica como saída de reserva */
-    $('#successHome').hidden = unpaidPix && canCancel;
+    /* "Voltar ao início" fica sempre disponível e NÃO cancela o pedido */
+    $('#successHome').hidden = false;
   }
 
   function renderTrackPix(order) {

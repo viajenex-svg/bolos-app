@@ -27,6 +27,10 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* o atributo hidden precisa vencer regras de display (.btn, .sheet etc.);
+   sem isso um botão "escondido" continuava aparecendo e desalinhava a folha */
+[hidden] { display: none !important; }
+
 html { -webkit-text-size-adjust: 100%; }
 
 body {
