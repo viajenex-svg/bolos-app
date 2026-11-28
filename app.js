@@ -167,7 +167,7 @@
     { id: 'presente', label: 'Embalagem de presente', price: 5 }
   ];
 
-  var FEE = 6.9;                 /* taxa fixa do servidor (reserva/fallback) */
+  var FEE = 0;                   /* taxa fixa vem da loja (api/menu); servidor usa 0 sem config */
   var DELIVERY = { cep: '', km: null, fee: null, source: 'fixed', tooFar: false, loading: false };
   var DELIVERY_CFG = { mode: 'fixed' };
   var geoFeeCache = {};
@@ -1393,6 +1393,7 @@
 
     var payload = {
       pay: store.pay,
+      coupon: store.coupon || '',
       name: store.addr.name || '',
       phone: store.addr.phone || '',
       cep: store.addr.cep || '',
@@ -1429,6 +1430,8 @@
         num: String(so.num),
         items: store.cart.slice(),
         subtotal: so.subtotal,
+        discount: so.discount || 0,
+        coupon: so.coupon || '',
         fee: so.fee,
         total: so.total,
         pay: so.pay,
@@ -1461,6 +1464,7 @@
         closeSheets();
         showTrack(order.num);
       };
+      $('#successCancel').onclick = function () { cancelOrder(order); };
       startOrderPoll(order.num);
       refreshMenu();
     }
@@ -1504,12 +1508,46 @@
     pixBlock($('#successPix'), $('#successPixQr'), $('#successPixCode'), order);
     $('#successTitle').textContent =
       (order.pix && !order.paid) ? 'Falta pagar o Pix' : 'Pedido confirmado!';
+    $('#successCancel').hidden = !!order.paid;
   }
 
   function renderTrackPix(order) {
     pixBlock($('#trackPix'), $('#trackPixQr'), $('#trackPixCode'), order);
     $('#trackPixTitle').textContent = order.paid ? 'Pix pago ✅' : 'Pix pendente';
     $('#trackTotalLabel').textContent = order.paid ? 'Total pago' : 'Total';
+    $('#trackCancel').hidden = !!order.paid || intStatus(order) >= 2;
+  }
+
+  /* desistiu do Pix: cancela no servidor e tira o pedido do histórico local */
+  function cancelOrder(order) {
+    if (!order || !order.token || order.paid) return;
+    if (!window.confirm('Cancelar o pedido #' + order.num + '?')) return;
+    var btn = $('#successSheet').hidden ? $('#trackCancel') : $('#successCancel');
+    var label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Cancelando…';
+    fetch('api/order/' + encodeURIComponent(order.num) + '/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ t: order.token })
+    }).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, d: d || {} }; });
+    }).then(function (res) {
+      if (!res.ok) throw new Error(res.d.error || 'Não foi possível cancelar');
+      for (var i = store.orders.length - 1; i >= 0; i--) {
+        if (store.orders[i].num === order.num) store.orders.splice(i, 1);
+      }
+      save();
+      stopOrderPoll(order.num);
+      closeSheets();
+      go('home');
+      renderBadge();
+      toast('Pedido #' + order.num + ' cancelado');
+    }).catch(function (e) {
+      btn.disabled = false;
+      btn.textContent = label;
+      toast((e && e.message) || 'Não foi possível cancelar');
+    });
   }
 
   function copyPix(code) {
@@ -1569,15 +1607,30 @@
     $('#trackTotal').textContent = brl(order.total);
     renderTrackPix(order);
     $('#tlTime').textContent = order.time;
-    $('#trackItems').innerHTML = order.items.map(function (i) {
+    var lines = order.items.map(function (i) {
       return '<div class="tline"><span>' + i.qty + '× ' + esc(i.name) + '</span><b>' + brl(i.unit * i.qty) + '</b></div>';
-    }).join('') + '<div class="tline"><span>Entrega</span><b>' + esc(order.addr) + '</b></div>';
+    });
+    /* detalha o total quando há frete ou cupom — o valor do rodapé é o do servidor */
+    var fee = Number(order.fee) || 0;
+    var disc = Number(order.discount) || 0;
+    if (order.subtotal != null && (fee > 0 || disc > 0)) {
+      lines.push('<div class="tline"><span>Subtotal</span><b>' + brl(order.subtotal) + '</b></div>');
+      if (disc > 0) {
+        lines.push('<div class="tline"><span>Cupom ' + esc(order.coupon || '') + '</span><b>−' + brl(disc) + '</b></div>');
+      }
+      if (fee > 0) {
+        lines.push('<div class="tline"><span>Entrega</span><b>' + brl(fee) + '</b></div>');
+      }
+    }
+    lines.push('<div class="tline"><span>Endereço</span><b>' + esc(order.addr) + '</b></div>');
+    $('#trackItems').innerHTML = lines.join('');
 
     setStatus(order.status || 1);
     startOrderPoll(num);   /* confere o status na hora ao abrir o acompanhamento */
     refreshPushBtn(num);
 
     $('#receiptBtn').onclick = function () { openReceipt(order); };
+    $('#trackCancel').onclick = function () { cancelOrder(order); };
 
     $('#repeatOrderBtn').onclick = function () {
       order.items.forEach(function (old) {
@@ -1767,6 +1820,7 @@
     }).join('');
 
     var fee = Number(order.fee) || 0;
+    var disc = Number(order.discount) || 0;
     var sub = order.subtotal != null ? Number(order.subtotal) : null;
 
     return '<div class="rc">' +
@@ -1782,6 +1836,7 @@
       '<table class="rc-items">' + rows + '</table>' +
       '<hr>' +
       (sub != null ? '<div class="rc-line"><span>Subtotal</span><b>' + brl(sub) + '</b></div>' : '') +
+      (disc > 0 ? '<div class="rc-line"><span>Cupom ' + esc(order.coupon || '') + '</span><b>−' + brl(disc) + '</b></div>' : '') +
       (fee > 0 ? '<div class="rc-line"><span>Entrega</span><b>' + brl(fee) + '</b></div>' : '') +
       '<div class="rc-line rc-total"><span>Total</span><b>' + brl(order.total) + '</b></div>' +
       '<div class="rc-line"><span>Pagamento</span><b>' + esc(PAY_TEXT[order.pay] || order.pay || '—') + '</b></div>' +
@@ -2567,6 +2622,8 @@
       if (s.fee != null) FEE = Number(s.fee) || 0;
       if (s.minOrder != null) STORE.minOrder = Number(s.minOrder) || 0;
       if (s.coupons && typeof s.coupons === 'object') COUPONS = s.coupons;
+      /* cupom que saiu do painel não pode continuar dando desconto no carrinho */
+      if (store.coupon && !COUPONS[store.coupon]) { store.coupon = null; save(); }
       if (s.delivery && typeof s.delivery === 'object') DELIVERY_CFG = s.delivery;
       if (Array.isArray(s.banners)) {
         var sig = JSON.stringify(s.banners);

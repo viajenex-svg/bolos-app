@@ -1253,6 +1253,8 @@ def public_order(o):
     """Pedido sem tokens — só o que o cliente e o motoboy podem ver."""
     out = {'num': o.get('num'), 'status': o.get('status') or 1,
            'time': o.get('time'), 'createdAt': o.get('createdAt'),
+           'subtotal': o.get('subtotal'), 'discount': o.get('discount') or 0,
+           'coupon': o.get('coupon') or '', 'fee': o.get('fee'),
            'total': o.get('total'), 'name': o.get('name'), 'addr': o.get('addr'),
            'pay': o.get('pay'), 'paid': bool(o.get('paid'))}
     pix = o.get('pix')
@@ -1321,8 +1323,11 @@ _mp_check = {}
 _mp_check_lock = threading.Lock()
 
 
-def mp_verify(data, order):
-    """Marca como pago se o MP já aprovou. Retorna True quando mudou."""
+def mp_verify(data, order, force=False):
+    """Marca como pago se o MP já aprovou. Retorna True quando mudou.
+
+    force=True (usado no cancelamento) ignora o intervalo de 8 s para não
+    apagar um pedido que acabou de ser pago."""
     if order.get('paid') or not order.get('pix'):
         return False
     pid = str((order.get('pix') or {}).get('id') or '')
@@ -1333,7 +1338,7 @@ def mp_verify(data, order):
     key = str(order.get('num'))
     with _mp_check_lock:
         last = _mp_check.get(key) or 0
-        if now - last < 8:
+        if not force and now - last < 8:
             return False
         if len(_mp_check) > 500:
             _mp_check.clear()
@@ -1936,10 +1941,15 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({'ok': True})
         ref = str(pay.get('external_reference') or '')
         pid = str(pay.get('id') or data_id)
+
+        def is_mine(o):
+            return str(o.get('num')) == ref or str((o.get('pix') or {}).get('id') or '') == pid
+
+        found = False
         for o in data.get('orders', []):
-            mine = str(o.get('num')) == ref or str((o.get('pix') or {}).get('id') or '') == pid
-            if not mine:
+            if not is_mine(o):
                 continue
+            found = True
             if not o.get('paid'):
                 o['paid'] = True
                 o['paidAt'] = int(time.time())
@@ -1948,6 +1958,24 @@ class Handler(BaseHTTPRequestHandler):
                 print('  Pix pago: pedido %s' % o.get('num'), flush=True)
                 _push_pix_paid(data, o)
             break
+
+        if not found:
+            # Pix caiu depois do cliente cancelar: devolve o pedido já pago
+            for o in data.get('cancelled_orders', []):
+                if not is_mine(o):
+                    continue
+                o['paid'] = True
+                o['paidAt'] = int(time.time())
+                o['paidVia'] = 'mp'
+                o['reopened'] = True
+                o['status'] = 1
+                data['orders'].insert(0, o)
+                data['orders'] = data['orders'][:300]
+                data['cancelled_orders'] = [x for x in data['cancelled_orders'] if x is not o]
+                save(data)
+                print('  Pix pago (pedido cancelado): pedido %s reaberto' % o.get('num'), flush=True)
+                _push_pix_paid(data, o)
+                break
         return self._json({'ok': True})
 
     # ---------- GET ----------
@@ -2271,6 +2299,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == '/api/push/subscribe':
             return self._app_push_subscribe()
+
+        m = re.match(r'^/api/order/([^/]+)/cancel$', path)
+        if m:
+            return self._cancel_order(unquote(m.group(1)), self._body())
 
         if path == '/api/orders':
             return self._create_order(self._body())
@@ -2743,15 +2775,35 @@ class Handler(BaseHTTPRequestHandler):
             r = resolve_cep(cep)
             if r.get('lat') is not None:
                 dest = (float(r['lat']), float(r['lon']))
-        nums = [int(o.get('num', 0)) for o in data['orders'] if str(o.get('num', '')).isdigit()]
+        # cupom: o app mostra o desconto no carrinho, então o servidor precisa
+        # aplicar o mesmo desconto (senão o total do Pix e do rastreio divergem)
+        subtotal = round(total, 2)
+        coupon = str(b.get('coupon') or '').upper().strip()[:20]
+        pct = 0.0
+        cps = st.get('coupons')
+        if coupon and isinstance(cps, dict):
+            try:
+                pct = float(cps.get(coupon) or 0)
+            except (TypeError, ValueError):
+                pct = 0.0
+        pct = max(0.0, min(0.9, pct))
+        discount = round(subtotal * pct, 2) if pct > 0 else 0.0
+        if coupon and discount <= 0:
+            return self._err(409, 'o cupom %s não está mais válido' % coupon)
+
+        # cancelados também contam na numeração: evita dois pedidos com o mesmo número
+        nums = [int(o.get('num', 0)) for o in (data['orders'] + (data.get('cancelled_orders') or []))
+                if str(o.get('num', '')).isdigit()]
         num = (max(nums) + 1) if nums else 1001
 
         order = {
             'num': str(num),
             'items': clean,
-            'subtotal': round(total, 2),
+            'subtotal': subtotal,
+            'discount': discount,
+            'coupon': coupon if discount > 0 else '',
             'fee': round(fee, 2),
-            'total': round(total + fee, 2),
+            'total': round(max(0.0, subtotal - discount) + fee, 2),
             'pay': str(b.get('pay') or 'pix')[:20],
             'name': str(b.get('name') or '')[:60],
             'phone': re.sub(r'\D', '', str(b.get('phone') or ''))[:13],
@@ -2784,6 +2836,38 @@ class Handler(BaseHTTPRequestHandler):
         # resposta pública: sem o mtoken (o link do motoboy só sai pelo painel)
         return self._json({'ok': True,
                            'order': {k: v for k, v in order.items() if k != 'mtoken'}})
+
+    def _cancel_order(self, num, b):
+        """Cliente desistiu do Pix: cancela e some com o pedido não pago."""
+        if not rate_ok('cx:%s' % self.client_address[0], 20):
+            return self._err(429, 'muitas tentativas, aguarde um instante')
+        data = load()
+        o = next((x for x in data.get('orders', [])
+                  if str(x.get('num')) == str(num)), None)
+        if not o or not _token_eq(str(b.get('t') or ''), o.get('token')):
+            return self._err(404, 'pedido não encontrado')
+        # confere no Mercado Pago sem o intervalo de 8 s: nunca apagar pedido pago
+        mp_verify(data, o, force=True)
+        if o.get('paid'):
+            return self._err(409, 'pagamento já confirmado — fale com a loja')
+        if int(o.get('status') or 1) >= 2:
+            return self._err(409, 'o pedido já entrou na produção')
+        prods = {p['id']: p for p in data.get('products', [])}
+        for it in o.get('items') or []:
+            p = prods.get(it.get('pid'))
+            if p and p.get('stock') is not None:
+                p['stock'] = int(p['stock']) + int(it.get('qty') or 0)
+        # guarda um resumo do cancelado: se o Pix cair atrasado, o webhook
+        # encontra o pedido e o devolve em vez de perder o pagamento
+        stub = {k: o.get(k) for k in ('num', 'items', 'subtotal', 'discount', 'coupon',
+                                      'fee', 'total', 'pay', 'token', 'pix', 'name',
+                                      'phone', 'addr', 'cep', 'time', 'createdAt')}
+        stub['cancelledAt'] = int(time.time())
+        data['cancelled_orders'] = ([stub] + (data.get('cancelled_orders') or []))[:50]
+        data['orders'] = [x for x in data['orders'] if x is not o]
+        save(data)
+        print('  Pedido %s cancelado pelo cliente' % num, flush=True)
+        return self._json({'ok': True})
 
     def _create_pdv_sale(self, b):
         """venda de balcão: vale fora do horário, sem frete, já concluída"""
