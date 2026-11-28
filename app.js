@@ -2005,12 +2005,28 @@
     }
   }
 
+  /* iOS/Safari só libera áudio dentro de um toque do usuário: destrava no 1º gesto */
+  var chirpAC = null;
+  function unlockAudio() {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!chirpAC) chirpAC = new AC();
+      if (chirpAC.state === 'suspended') chirpAC.resume();
+    } catch (e) { /* sem áudio */ }
+  }
+  ['touchstart', 'pointerdown', 'keydown', 'click'].forEach(function (ev) {
+    document.addEventListener(ev, unlockAudio, { once: true, passive: true });
+  });
+
   function chirp() {
     /* ding-dong duplo: sino descendente (sol5 → mi5), repetido */
     try {
       var AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
-      var ac = new AC();
+      if (!chirpAC) chirpAC = new AC();
+      var ac = chirpAC;
+      if (ac.state === 'suspended') ac.resume();
       var notes = [[0, 784], [0.5, 659], [1.15, 784], [1.65, 659]];
       notes.forEach(function (n) {
         var t = ac.currentTime + n[0];
@@ -2029,7 +2045,7 @@
           o.stop(t + 0.95);
         });
       });
-      setTimeout(function () { ac.close && ac.close(); }, 3200);
+      /* contexto fica aberto para os próximos avisos (destravado no iOS) */
     } catch (e) { /* sem áudio: só vibra */ }
   }
 
