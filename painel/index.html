@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#2B2118">
   <meta name="robots" content="noindex">
   <link rel="icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/painel/painel.css?v=34">
+  <link rel="stylesheet" href="/painel/painel.css?v=35">
 </head>
 <body>
 
@@ -351,6 +351,17 @@
       <button class="btn ghost small" id="changePin" type="button">Trocar PIN</button>
       <p class="fee-hint" id="pinHint" hidden></p>
 
+      <h3 class="sub">Pagamentos · Pix automático</h3>
+      <p class="fee-hint">Receba o Pix direto na sua conta do Mercado Pago. Cole o <b>Access Token</b> da sua aplicação (Mercado Pago → Developers → sua aplicação → Credenciais). O dinheiro cai só na conta deste token: se você vender ou alugar o app, o novo dono troca o token aqui e passa a receber na conta dele.</p>
+      <div class="mp-status" id="mpStatus">Mercado Pago não configurado</div>
+      <label class="field"><span>Access Token do Mercado Pago</span><input id="mpToken" type="password" maxlength="200" autocomplete="off" placeholder="APP_USR-..."></label>
+      <label class="check"><input id="mpOn" type="checkbox"> <span>Cobrar Pix automático no checkout</span></label>
+      <div class="mp-actions">
+        <button class="btn ghost small" id="mpSave" type="button">Salvar token</button>
+        <button class="btn danger ghost small" id="mpClear" type="button">Remover token</button>
+      </div>
+      <p class="fee-hint" id="mpHint" hidden></p>
+
       <div class="save-bar">
         <button class="btn solid" id="saveStore" type="button">Salvar loja</button>
       </div>
@@ -441,7 +452,7 @@
 
 <div class="toast-p" id="toastP" role="status" aria-live="polite"></div>
 
-<script src="/painel/painel.js?v=37"></script>
+<script src="/painel/painel.js?v=38"></script>
 </body>
 <!-- painel desktop build 2 (2026-11-28) -->
 </html>

@@ -1898,3 +1898,37 @@ input[type="text"], input[type="search"], textarea { font-size: 16px; }
   padding: 5px 11px; border-radius: 999px; margin-bottom: 12px;
 }
 .profile-name-btn { display: block; margin: 10px 0 0; font-size: 13px; }
+
+/* Pix do Mercado Pago — QR e copia e cola */
+.pix-box {
+  margin: 14px 0 4px;
+  padding: 14px;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  text-align: center;
+}
+.pix-box > b { display: block; font-size: 14px; margin-bottom: 10px; color: var(--ink); }
+.pix-box img {
+  display: block;
+  width: 190px;
+  max-width: 100%;
+  margin: 0 auto 10px;
+  border-radius: 10px;
+  background: #fff;
+}
+.pix-box textarea {
+  width: 100%;
+  resize: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.45;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+.pix-box .pix-note { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+.pix-box .btn { margin-bottom: 6px; }

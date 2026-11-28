@@ -583,6 +583,7 @@ def public_menu(data):
             'img', 'desc', 'stock', 'extras', 'sizes')})
     products.extend(banner_products(st, bans))
     store['popular'] = popular_ids(data, products)
+    store['pixAuto'] = mp_public(data).get('on') is True
     return {'store': store, 'products': products, 'ts': int(time.time())}
 
 
@@ -1250,9 +1251,87 @@ def _token_eq(given, expected):
 
 def public_order(o):
     """Pedido sem tokens — só o que o cliente e o motoboy podem ver."""
-    return {'num': o.get('num'), 'status': o.get('status') or 1,
-            'time': o.get('time'), 'createdAt': o.get('createdAt'),
-            'total': o.get('total'), 'name': o.get('name'), 'addr': o.get('addr')}
+    out = {'num': o.get('num'), 'status': o.get('status') or 1,
+           'time': o.get('time'), 'createdAt': o.get('createdAt'),
+           'total': o.get('total'), 'name': o.get('name'), 'addr': o.get('addr'),
+           'pay': o.get('pay'), 'paid': bool(o.get('paid'))}
+    pix = o.get('pix')
+    if pix and not o.get('paid'):
+        out['pix'] = {'copy': pix.get('copy'), 'qr': pix.get('qr')}
+    return out
+
+
+# ------------------------------------------------------- Mercado Pago (Pix)
+
+MP_API = 'https://api.mercadopago.com'
+
+# O Access Token é de cada instalação: fica no banco (mp_cfg), nunca no
+# repositório, nunca em /api/admin/all e nunca no backup. Quem vende ou aluga
+# o app troca o token no painel e passa a receber na própria conta do MP.
+
+
+def mp_cfg(data):
+    cfg = data.get('mp_cfg')
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def mp_public(data):
+    cfg = mp_cfg(data)
+    return {'configured': bool(cfg.get('token')),
+            'on': bool(cfg.get('on')) and bool(cfg.get('token')),
+            'account': str(cfg.get('account') or '')[:60],
+            'updatedAt': cfg.get('updatedAt')}
+
+
+def _mp_call(method, path, token, body=None, key='', timeout=12):
+    headers = {'Authorization': 'Bearer %s' % token,
+               'Content-Type': 'application/json',
+               'Accept': 'application/json'}
+    if key:
+        headers['X-Idempotency-Key'] = key
+    req = urllib.request.Request(
+        MP_API + path, method=method, headers=headers,
+        data=json.dumps(body).encode('utf-8') if body is not None else None)
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode('utf-8') or '{}')
+
+
+def _mp_payer_email(data, num):
+    """E-mail do pagador: +alias no e-mail da loja (o recibo cai no dono)."""
+    mail = str((data.get('store') or {}).get('email') or '').strip().lower()
+    m = re.match(r'^([a-z0-9._%+-]+)@([a-z0-9.-]+\.[a-z]{2,})$', mail)
+    if m:
+        return '%s+pedido%s@%s' % (m.group(1), num, m.group(2))
+    return 'pedido%s@example.com' % num
+
+
+def mp_pix(data, order, base_url):
+    """Cria a cobrança Pix na conta do token configurado no painel."""
+    cfg = mp_cfg(data)
+    token = str(cfg.get('token') or '')
+    if not token or not cfg.get('on'):
+        return None
+    body = {'transaction_amount': round(float(order.get('total') or 0), 2),
+            'description': 'Pedido #%s' % order.get('num'),
+            'payment_method_id': 'pix',
+            'external_reference': str(order.get('num')),
+            'payer': {'email': _mp_payer_email(data, order.get('num'))}}
+    base = str(base_url or '').rstrip('/')
+    if base.startswith('https://'):
+        body['notification_url'] = base + '/api/mp/webhook'
+    try:
+        r = _mp_call('POST', '/v1/payments', token, body,
+                     key='bolos-%s-%s' % (order.get('num'), uuid.uuid4().hex[:10]))
+    except Exception as e:
+        print('  aviso: Mercado Pago recusou o Pix (%s)' % e, flush=True)
+        return None
+    tr = ((r.get('point_of_interaction') or {}).get('transaction_data') or {})
+    qr = tr.get('qr_code') or ''
+    if not qr:
+        print('  aviso: Mercado Pago respondeu sem qr_code', flush=True)
+        return None
+    return {'id': str(r.get('id') or ''), 'copy': qr,
+            'qr': tr.get('qr_code_base64') or '', 'url': tr.get('ticket_url') or ''}
 
 
 # ----------------------------------------------------------------- push
@@ -1691,6 +1770,88 @@ class Handler(BaseHTTPRequestHandler):
             return self._err(502, 'não consegui enviar o e-mail agora; tente mais tarde')
         return self._json({'ok': True})
 
+    def _base_url(self):
+        """URL pública desta instalação (para o webhook do Mercado Pago)."""
+        env = os.environ.get('SC_BASE_URL', '').strip()
+        if env:
+            return env.rstrip('/')
+        host = str(self.headers.get('Host') or 'localhost:%d' % PORT)
+        proto = (self.headers.get('X-Forwarded-Proto') or '').strip().lower()
+        if proto not in ('http', 'https'):
+            local = re.match(r'^(localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)', host)
+            proto = 'http' if local else 'https'
+        return '%s://%s' % (proto, host)
+
+    def _save_mp(self, b):
+        """Configuração do Pix do Mercado Pago — de cada dono do app."""
+        data = load()
+        old = mp_cfg(data)
+        if b.get('clear'):
+            data.pop('mp_cfg', None)
+            save(data)
+            return self._json({'ok': True, 'mp': mp_public(data)})
+
+        token = str(b.get('token') or '').strip()
+        if token and len(token) < 20:
+            return self._err(400, 'esse token parece curto — copie o Access Token inteiro')
+        if not token:
+            token = str(old.get('token') or '')
+        if not token:
+            return self._err(400, 'cole o Access Token do Mercado Pago')
+
+        account = str(old.get('account') or '')
+        if token != str(old.get('token') or ''):
+            try:
+                me = _mp_call('GET', '/users/me', token)
+                account = str(me.get('nickname') or me.get('email') or '')[:60]
+            except urllib.error.HTTPError as e:
+                if e.code in (401, 403):
+                    return self._err(403, 'token recusado pelo Mercado Pago — confira e cole de novo')
+                return self._err(502, 'não consegui falar com o Mercado Pago agora (tente de novo)')
+            except Exception:
+                return self._err(502, 'não consegui falar com o Mercado Pago agora (tente de novo)')
+
+        on = b.get('on')
+        data['mp_cfg'] = {'token': token,
+                          'on': bool(on) if on is not None else bool(old.get('on')),
+                          'account': account,
+                          'updatedAt': int(time.time())}
+        save(data)
+        return self._json({'ok': True, 'mp': mp_public(data)})
+
+    def _mp_webhook(self, query):
+        """O Mercado Pago avisa aqui. Confere na API e marca o pedido como pago."""
+        b = self._body() or {}
+        typ = str(b.get('type') or b.get('topic') or (query.get('type') or query.get('topic') or [''])[0])
+        data_id = str((b.get('data') or {}).get('id') or (query.get('data.id') or query.get('id') or [''])[0])
+        if typ != 'payment' or not data_id:
+            return self._json({'ok': True})
+        data = load()
+        token = str(mp_cfg(data).get('token') or '')
+        if not token:
+            return self._json({'ok': True})
+        try:
+            pay = _mp_call('GET', '/v1/payments/%s' % quote(data_id), token)
+        except Exception as e:
+            print('  aviso: webhook do MP não verificou o pagamento %s (%s)' % (data_id, e), flush=True)
+            return self._json({'ok': True})
+        if str(pay.get('status')) != 'approved':
+            return self._json({'ok': True})
+        ref = str(pay.get('external_reference') or '')
+        pid = str(pay.get('id') or data_id)
+        for o in data.get('orders', []):
+            mine = str(o.get('num')) == ref or str((o.get('pix') or {}).get('id') or '') == pid
+            if not mine:
+                continue
+            if not o.get('paid'):
+                o['paid'] = True
+                o['paidAt'] = int(time.time())
+                o['paidVia'] = 'mp'
+                save(data)
+                print('  Pix pago: pedido %s' % o.get('num'), flush=True)
+            break
+        return self._json({'ok': True})
+
     # ---------- GET ----------
 
     def do_GET(self):
@@ -1725,6 +1886,7 @@ class Handler(BaseHTTPRequestHandler):
         origin = store_origin_any(data)
         dest = order_dest(order)
         out = {'ok': True, 'num': order.get('num'), 'status': status,
+               'paid': bool(order.get('paid')),
                'serverNow': now, 'staleAfter': TRACK_STALE,
                'origin': _pt(origin), 'dest': _pt(dest),
                'route': None, 'courier': None}
@@ -1847,8 +2009,11 @@ class Handler(BaseHTTPRequestHandler):
             if not self._need_auth():
                 return
             data = dict(data)
+            mp = mp_public(data)
+            data.pop('mp_cfg', None)        # o token do Mercado Pago nunca sai daqui
             data.pop('push_cfg', None)      # a chave privada VAPID nunca sai daqui
             data.pop('admin', None)         # o PIN nunca sai daqui
+            data['mp'] = mp
             data['pushDevices'] = len(data.pop('admin_push_subs', None) or [])
             data['appDevices'] = len(_all_app_subs(data))
             data.pop('broadcast_subs', None)
@@ -1875,6 +2040,7 @@ class Handler(BaseHTTPRequestHandler):
             # sem a chave privada VAPID nem inscrições: o backup pode ir para
             # artefato público do GitHub e ninguém deve poder enviar push
             safe = json.loads(json.dumps(data, ensure_ascii=False))
+            safe.pop('mp_cfg', None)         # backup público não leva o token do MP
             safe.pop('push_cfg', None)
             safe.pop('admin', None)          # backup público não leva o PIN
             safe.pop('admin_push_subs', None)
@@ -1976,6 +2142,9 @@ class Handler(BaseHTTPRequestHandler):
         if m:
             return self._push_subscribe(unquote(m.group(1)), query)
 
+        if path == '/api/mp/webhook':
+            return self._mp_webhook(query)
+
         if path == '/api/auth':
             b = self._body()
             if pin_ok(self.client_address[0], b.get('pin')):
@@ -1994,6 +2163,11 @@ class Handler(BaseHTTPRequestHandler):
             if not self._need_auth():
                 return
             return self._create_pdv_sale(self._body())
+
+        if path == '/api/admin/mp':
+            if not self._need_auth():
+                return
+            return self._save_mp(self._body())
 
         if path == '/api/push/subscribe':
             return self._app_push_subscribe()
@@ -2492,7 +2666,16 @@ class Handler(BaseHTTPRequestHandler):
             'time': time.strftime('%H:%M'),
             'createdAt': int(time.time()),
             'status': 1,
+            'paid': False,
         }
+
+        # Pix automático: cobra na conta do Mercado Pago configurada no painel.
+        # Se o MP falhar, o pedido é criado do mesmo jeito (pix fica de fora).
+        if order['pay'] == 'pix':
+            pix = mp_pix(data, order, self._base_url())
+            if pix:
+                order['pix'] = pix
+
         data['orders'].insert(0, order)
         data['orders'] = data['orders'][:300]
         save(data)
@@ -2577,6 +2760,8 @@ class Handler(BaseHTTPRequestHandler):
             'time': time.strftime('%H:%M'),
             'createdAt': int(time.time()),
             'status': 4,
+            'paid': True,
+            'paidVia': 'pdv',
             'channel': 'pdv',
             'note': str(b.get('note') or '')[:200]
         }

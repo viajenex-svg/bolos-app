@@ -1221,3 +1221,18 @@ button { cursor: pointer; }
   .pdv-cart { position: sticky; top: 100px; }
   .pdv-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
 }
+
+/* Pix do Mercado Pago (aba Loja) */
+.mp-status {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--panel);
+  font-size: 13px;
+  color: var(--muted);
+}
+.mp-status.is-on { border-color: #C4E3D0; background: #E4F3E9; color: #2E7D4F; }
+.mp-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.paid-tag { color: var(--green); font-weight: 600; }
+.pix-tag { color: var(--accent); font-weight: 600; }

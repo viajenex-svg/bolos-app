@@ -9,7 +9,7 @@
   var TAB_KEY = 'sc-admin-tab';
   var pin = localStorage.getItem(PIN_KEY) || '';
 
-  var state = { store: {}, products: [], orders: [] };
+  var state = { store: {}, products: [], orders: [], mp: {} };
   var editing = null;          // id do produto em edição, 'new' ou null
   var editingImg = '';
   var activeTab = 'produtos';
@@ -434,6 +434,7 @@
       state.store = d.store || {};
       state.products = d.products || [];
       state.orders = d.orders || [];
+      state.mp = d.mp || {};
       state.appDevices = d.appDevices || 0;
       state.broadcastLog = d.broadcast_log || [];
       alertNewOrders(syncOrders(state.orders));
@@ -464,6 +465,7 @@
     renderStock();
     renderOrders();
     renderStore();
+    renderMp();
     renderCash();
     renderBroadcast();
   }
@@ -600,6 +602,8 @@
         (isPdv ? '<span>🏪 Venda no balcão</span>' : '<span>📍 ' + esc(o.addr || '—') + '</span>') +
         (tel ? '<span>📞 ' + esc(tel) + '</span>' : '') +
         '<span>💳 ' + esc(PAY[o.pay] || o.pay || '—') + '</span>' +
+        (o.paid ? '<span class="paid-tag">Pix pago ✅</span>'
+                : (o.pix ? '<span class="pix-tag">Pix pendente</span>' : '')) +
         '</div>' +
         (waHref ? '<a class="wa-link" href="' + waHref + '" target="_blank" rel="noopener">💬 Avisar no WhatsApp</a>' : '') +
         (mbHref ? '<div class="mb-line">' +
@@ -625,6 +629,59 @@
       roadFactor: d.roadFactor != null ? Number(d.roadFactor) : 1.3
     };
   }
+
+  function renderMp() {
+    var m = state.mp || {};
+    var st = $('#mpStatus');
+    if (!st) return;
+    if (m.configured) {
+      st.className = 'mp-status is-on';
+      st.textContent = 'Mercado Pago configurado' + (m.account ? ' · ' + m.account : '') +
+        (m.on ? ' · Pix automático ativo' : ' · Pix automático desligado');
+    } else {
+      st.className = 'mp-status';
+      st.textContent = 'Mercado Pago não configurado — o Pix do checkout não é cobrado automaticamente';
+    }
+    $('#mpOn').checked = !!m.on;
+    $('#mpToken').value = '';
+    $('#mpToken').placeholder = m.configured
+      ? 'configurado — deixe em branco para manter'
+      : 'APP_USR-...';
+    $('#mpClear').hidden = !m.configured;
+    $('#mpHint').hidden = true;
+  }
+
+  function mpSave() {
+    var btn = $('#mpSave');
+    var token = $('#mpToken').value.trim();
+    btn.disabled = true;
+    api('/api/admin/mp', { method: 'POST', body: { token: token, on: $('#mpOn').checked } })
+      .then(function (d) {
+        state.mp = d.mp || {};
+        renderMp();
+        toast(d.mp && d.mp.on ? 'Pix automático ativo' : 'Token salvo');
+      })
+      .catch(function (e) {
+        var hint = $('#mpHint');
+        hint.hidden = false;
+        hint.textContent = e.message;
+        toast(e.message);
+      })
+      .then(function () { btn.disabled = false; });
+  }
+
+  $('#mpSave').addEventListener('click', mpSave);
+
+  $('#mpClear').addEventListener('click', function () {
+    if (!window.confirm('Remover o token do Mercado Pago? O Pix automático para de funcionar.')) return;
+    api('/api/admin/mp', { method: 'POST', body: { clear: true } })
+      .then(function (d) {
+        state.mp = d.mp || {};
+        renderMp();
+        toast('Token do Mercado Pago removido');
+      })
+      .catch(function (e) { toast(e.message); });
+  });
 
   function renderStore() {
     var s = state.store;

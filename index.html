@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="style.css?v=31">
+  <link rel="stylesheet" href="style.css?v=32">
 </head>
 <body>
 
@@ -240,7 +240,15 @@
     <div class="track-card" id="trackItems"></div>
 
     <div class="track-total">
-      <span>Total pago</span><b id="trackTotal">R$ 0,00</b>
+      <span id="trackTotalLabel">Total</span><b id="trackTotal">R$ 0,00</b>
+    </div>
+
+    <div class="pix-box" id="trackPix" hidden>
+      <b id="trackPixTitle">Pix pendente</b>
+      <img id="trackPixQr" alt="QR Code do Pix">
+      <textarea id="trackPixCode" readonly rows="2" aria-label="Código Pix copia e cola"></textarea>
+      <button class="btn btn-ghost btn-block" id="trackPixCopy" type="button">Copiar código Pix</button>
+      <p class="pix-note">O pagamento cai direto para a confeitaria e o pedido é confirmado sozinho.</p>
     </div>
 
     <button class="btn btn-line btn-block" id="pushBtn" type="button" hidden>🔔 Avisar quando sair para entrega</button>
@@ -358,7 +366,7 @@
 
       <h3 class="ps-label">Como pagar?</h3>
       <div class="pay-list" id="payList">
-        <label class="pay"><input type="radio" name="pay" value="pix" checked><span class="pay-ico">⚡</span><span><b>Pix</b><small>Aprovação na hora</small></span><i class="radio"></i></label>
+        <label class="pay"><input type="radio" name="pay" value="pix" checked><span class="pay-ico">⚡</span><span><b>Pix</b><small id="pixNote">Aprovação na hora</small></span><i class="radio"></i></label>
         <label class="pay"><input type="radio" name="pay" value="card"><span class="pay-ico">💳</span><span><b>Cartão na entrega</b><small>Crédito ou débito</small></span><i class="radio"></i></label>
         <label class="pay"><input type="radio" name="pay" value="cash"><span class="pay-ico">💵</span><span><b>Dinheiro</b><small><span id="cashNote">Troco para R$ 100,00</span></small></span><i class="radio"></i></label>
       </div>
@@ -457,8 +465,15 @@
   <!-- sucesso -->
   <div class="sheet sheet-center" id="successSheet" role="dialog" aria-modal="true" hidden>
     <div class="success-ico">✓</div>
-    <h2>Pedido confirmado!</h2>
+    <h2 id="successTitle">Pedido confirmado!</h2>
     <p>O número do seu pedido é <b id="successNum">#0000</b>.<br>Já mandamos para a confeitaria. 🎂</p>
+    <div class="pix-box" id="successPix" hidden>
+      <b>Pague com Pix para confirmar</b>
+      <img id="successPixQr" alt="QR Code do Pix">
+      <textarea id="successPixCode" readonly rows="2" aria-label="Código Pix copia e cola"></textarea>
+      <button class="btn btn-ghost btn-block" id="successPixCopy" type="button">Copiar código Pix</button>
+      <p class="pix-note">O pedido é confirmado automaticamente assim que o pagamento cai.</p>
+    </div>
     <button class="btn btn-solid btn-block" id="successTrack" type="button">Acompanhar pedido</button>
     <button class="btn btn-ghost btn-block" type="button" data-goto="home">Voltar ao início</button>
   </div>
@@ -476,7 +491,7 @@
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
-<script src="app.js?v=48"></script>
+<script src="app.js?v=50"></script>
 </body>
 </html>
 <!-- build 2026-11-27 checkout-fix -->

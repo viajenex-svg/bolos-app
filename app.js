@@ -1438,7 +1438,9 @@
         time: so.time,
         createdAt: so.createdAt,
         status: so.status || 1,
-        token: so.token || ''
+        token: so.token || '',
+        pix: so.pix || null,
+        paid: !!so.paid
       };
       store.orders.unshift(order);
       store.cart = [];
@@ -1452,6 +1454,7 @@
 
       closeSheets();
       $('#successNum').textContent = '#' + order.num;
+      renderSuccessPix(order);
       openSheet($('#successSheet'));
       $('#successTrack').onclick = function () {
         closeSheets();
@@ -1484,6 +1487,54 @@
     }
   }
 
+  /* ---------------- Pix (Mercado Pago) ---------------- */
+
+  function pixBlock(box, qrEl, codeEl, order) {
+    var pix = order && order.pix;
+    var show = !!(pix && !order.paid);
+    box.hidden = !show;
+    if (!show) return;
+    qrEl.hidden = !pix.qr;
+    if (pix.qr) qrEl.src = 'data:image/png;base64,' + pix.qr;
+    codeEl.value = pix.copy || '';
+  }
+
+  function renderSuccessPix(order) {
+    pixBlock($('#successPix'), $('#successPixQr'), $('#successPixCode'), order);
+    $('#successTitle').textContent =
+      (order.pix && !order.paid) ? 'Falta pagar o Pix' : 'Pedido confirmado!';
+  }
+
+  function renderTrackPix(order) {
+    pixBlock($('#trackPix'), $('#trackPixQr'), $('#trackPixCode'), order);
+    $('#trackPixTitle').textContent = order.paid ? 'Pix pago ✅' : 'Pix pendente';
+    $('#trackTotalLabel').textContent = order.paid ? 'Total pago' : 'Total';
+  }
+
+  function copyPix(code) {
+    if (!code) return;
+    function done() { toast('Código Pix copiado'); }
+    function legacy() {
+      var t = document.createElement('textarea');
+      t.value = code;
+      t.style.position = 'fixed';
+      t.style.opacity = '0';
+      document.body.appendChild(t);
+      t.select();
+      try { document.execCommand('copy'); done(); }
+      catch (e) { toast('Selecione o código e copie'); }
+      document.body.removeChild(t);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(done).catch(legacy);
+    } else {
+      legacy();
+    }
+  }
+
+  $('#successPixCopy').addEventListener('click', function () { copyPix($('#successPixCode').value); });
+  $('#trackPixCopy').addEventListener('click', function () { copyPix($('#trackPixCode').value); });
+
   function showTrack(num) {
     clearTrackTimers();
     var order = null;
@@ -1497,6 +1548,7 @@
 
     $('#trackNum').textContent = '#' + order.num;
     $('#trackTotal').textContent = brl(order.total);
+    renderTrackPix(order);
     $('#tlTime').textContent = order.time;
     $('#trackItems').innerHTML = order.items.map(function (i) {
       return '<div class="tline"><span>' + i.qty + '× ' + esc(i.name) + '</span><b>' + brl(i.unit * i.qty) + '</b></div>';
@@ -1875,7 +1927,7 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d || !d.ok) return;
-        applyServerStatus(order.num, d.status);   /* status também anda com o mapa */
+        applyServerStatus(order.num, d.status, d);   /* status também anda com o mapa */
         renderTrackData(d);
       })
       .catch(function () { mapNote('Sem conexão — o mapa tenta de novo em instantes.'); });
@@ -2096,9 +2148,15 @@
   });
 
   /* aplica um status vindo do servidor sem nunca voltar atrás */
-  function applyServerStatus(num, raw) {
+  function applyServerStatus(num, raw, info) {
     var o = orderByNum(num);
     if (!o) return;
+    if (info && info.paid !== undefined && !!info.paid !== !!o.paid) {
+      o.paid = !!info.paid;
+      if (o.paid) o.pix = null;
+      save();
+      if (current === 'track' && $('#trackNum').textContent === '#' + num) renderTrackPix(o);
+    }
     var st = Math.min(4, Math.max(1, Number(raw) || 1));
     var prev = Number(o.status) || 1;
     if (st <= prev) return;
@@ -2138,7 +2196,7 @@
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (d) {
           if (!alive()) return;
-          if (d && d.order) applyServerStatus(num, d.order.status);
+          if (d && d.order) applyServerStatus(num, d.order.status, d.order);
           next();
         })
         .catch(next); /* app offline: tenta de novo no próximo ciclo */
@@ -2474,6 +2532,9 @@
       STORE.open = s.open !== false;
       if (s.hours) STORE.hours = s.hours;
       if (s.whatsapp) STORE.whatsapp = s.whatsapp;
+      STORE.pixAuto = s.pixAuto === true;
+      var pn = $('#pixNote');
+      if (pn) pn.textContent = STORE.pixAuto ? 'Aprovação na hora' : 'Combine no WhatsApp';
       if (s.fee != null) FEE = Number(s.fee) || 0;
       if (s.minOrder != null) STORE.minOrder = Number(s.minOrder) || 0;
       if (s.coupons && typeof s.coupons === 'object') COUPONS = s.coupons;
