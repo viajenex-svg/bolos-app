@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="style.css?v=32">
+  <link rel="stylesheet" href="style.css?v=33">
 </head>
 <body>
 
@@ -246,7 +246,8 @@
     <div class="pix-box" id="trackPix" hidden>
       <b id="trackPixTitle">Pix pendente</b>
       <img id="trackPixQr" alt="QR Code do Pix">
-      <textarea id="trackPixCode" readonly rows="2" aria-label="Código Pix copia e cola"></textarea>
+      <textarea id="trackPixCode" readonly rows="2" aria-label="Código Pix copia e cola" inputmode="none"></textarea>
+      <small class="pix-tap">Toque no código para copiar</small>
       <button class="btn btn-ghost btn-block" id="trackPixCopy" type="button">Copiar código Pix</button>
       <p class="pix-note">O pagamento cai direto para a confeitaria e o pedido é confirmado sozinho.</p>
     </div>
@@ -470,7 +471,8 @@
     <div class="pix-box" id="successPix" hidden>
       <b>Pague com Pix para confirmar</b>
       <img id="successPixQr" alt="QR Code do Pix">
-      <textarea id="successPixCode" readonly rows="2" aria-label="Código Pix copia e cola"></textarea>
+      <textarea id="successPixCode" readonly rows="2" aria-label="Código Pix copia e cola" inputmode="none"></textarea>
+      <small class="pix-tap">Toque no código para copiar</small>
       <button class="btn btn-ghost btn-block" id="successPixCopy" type="button">Copiar código Pix</button>
       <p class="pix-note">O pedido é confirmado automaticamente assim que o pagamento cai.</p>
     </div>
@@ -491,7 +493,7 @@
 </div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
-<script src="app.js?v=50"></script>
+<script src="app.js?v=51"></script>
 </body>
 </html>
 <!-- build 2026-11-27 checkout-fix -->

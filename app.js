@@ -1532,8 +1532,26 @@
     }
   }
 
-  $('#successPixCopy').addEventListener('click', function () { copyPix($('#successPixCode').value); });
-  $('#trackPixCopy').addEventListener('click', function () { copyPix($('#trackPixCode').value); });
+  function pixTap(el) {
+    if (!el) return;
+    el.addEventListener('click', function () {
+      copyPix(el.value);
+      el.setSelectionRange(0, el.value.length);
+    });
+    el.addEventListener('focus', function () {
+      el.setSelectionRange(0, el.value.length);
+    });
+  }
+  pixTap($('#successPixCode'));
+  pixTap($('#trackPixCode'));
+  $('#successPixCopy').addEventListener('click', function () {
+    copyPix($('#successPixCode').value);
+    $('#successPixCode').setSelectionRange(0, $('#successPixCode').value.length);
+  });
+  $('#trackPixCopy').addEventListener('click', function () {
+    copyPix($('#trackPixCode').value);
+    $('#trackPixCode').setSelectionRange(0, $('#trackPixCode').value.length);
+  });
 
   function showTrack(num) {
     clearTrackTimers();
